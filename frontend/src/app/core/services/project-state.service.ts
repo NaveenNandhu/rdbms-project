@@ -23,7 +23,7 @@ export class ProjectStateService {
   constructor() {
     const hasToken = !!localStorage.getItem('db_insight_token') && localStorage.getItem('db_insight_logged_out') !== 'true';
     if (hasToken) {
-      this.loadInitialWorkspaceSchema();
+      this.loadUserProjects();
     }
   }
 
@@ -32,6 +32,61 @@ export class ProjectStateService {
     this.activeAnalysis.set(null);
     this.selectedTableName.set(null);
     this.selectedRelationshipId.set(null);
+  }
+
+  public loadUserProjects() {
+    this.api.listProjects().subscribe({
+      next: (res: any) => {
+        if (res.success && res.projects && res.projects.length > 0) {
+          const latestProj = res.projects[0];
+          this.activeProject.set(latestProj);
+
+          this.api.getProject(latestProj.id).subscribe({
+            next: (pRes: any) => {
+              const schema = pRes.project?.databaseSchemas?.[0];
+              if (schema && schema.tables && schema.tables.length > 0) {
+                const reconstructedTables = schema.tables.map((t: any) => ({
+                  name: t.name,
+                  columns: t.columns.map((c: any) => ({
+                    name: c.name,
+                    dataType: c.dataType,
+                    isPrimaryKey: !!c.isPrimaryKey,
+                    isForeignKey: !!c.isForeignKey,
+                    isNullable: c.isNullable ?? !c.isPrimaryKey,
+                    isUnique: !!c.isUnique
+                  })),
+                  primaryKey: t.columns.filter((c: any) => c.isPrimaryKey).map((c: any) => c.name),
+                  candidateKeys: [t.columns.filter((c: any) => c.isPrimaryKey).map((c: any) => c.name)],
+                  foreignKeys: schema.relationships?.filter((r: any) => r.sourceTable === t.name).map((r: any) => ({
+                    column: r.sourceColumn,
+                    targetTable: r.targetTable,
+                    targetColumn: r.targetColumn
+                  })) || []
+                }));
+
+                this.api.executeAnalysis({
+                  projectId: latestProj.id,
+                  projectTitle: latestProj.title,
+                  tables: reconstructedTables,
+                  dialect: latestProj.dialect || 'postgresql'
+                }).subscribe({
+                  next: (analysis) => {
+                    this.setAnalysis(analysis, latestProj);
+                  },
+                  error: () => {}
+                });
+              }
+            },
+            error: () => {}
+          });
+        } else {
+          this.resetWorkspace();
+        }
+      },
+      error: () => {
+        this.resetWorkspace();
+      }
+    });
   }
 
   public setLearningMode(mode?: any) {

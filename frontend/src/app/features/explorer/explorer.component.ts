@@ -1,12 +1,13 @@
 import { Component, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { RouterModule } from '@angular/router';
 import { ProjectStateService } from '../../core/services/project-state.service';
 import { ParsedTable } from '../../core/models/schema.models';
 
 @Component({
   selector: 'app-explorer',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, RouterModule],
   template: `
     <div class="max-w-6xl mx-auto space-y-6 fade-in pb-12">
       <!-- Header -->
@@ -25,13 +26,32 @@ import { ParsedTable } from '../../core/models/schema.models';
       </div>
 
       <!-- Empty State -->
-      <div *ngIf="!state.activeAnalysis() || state.activeAnalysis()?.tables?.length === 0" class="p-12 text-center bg-white dark:bg-slate-900 rounded-3xl border border-surface-border dark:border-slate-800 shadow-soft space-y-4">
+      <div *ngIf="!state.activeAnalysis() || state.activeAnalysis()?.tables?.length === 0" class="p-12 text-center bg-white dark:bg-slate-900 rounded-3xl border border-surface-border dark:border-slate-800 shadow-soft space-y-5">
         <div class="w-16 h-16 mx-auto rounded-2xl bg-blue-100 dark:bg-blue-950/40 text-primary-600 dark:text-primary-400 flex items-center justify-center text-2xl">
           <i class="fa-solid fa-table-list"></i>
         </div>
-        <div>
-          <h3 class="font-bold text-base text-content-main dark:text-slate-100">No Schema Available</h3>
-          <p class="text-xs text-content-muted dark:text-slate-400 mt-1">Upload SQL or an ER diagram to explore relational columns and keys.</p>
+        <div class="max-w-md mx-auto">
+          <h3 class="font-bold text-base text-content-main dark:text-slate-100">No Active Database Schema</h3>
+          <p class="text-xs text-content-muted dark:text-slate-400 mt-1.5 leading-relaxed">
+            Your account currently has no active database analysis. You can create a new project and test your own SQL/ER diagram, or load our academic sample schema to explore tables and keys.
+          </p>
+        </div>
+        <div class="flex flex-wrap items-center justify-center gap-3 pt-2">
+          <a
+            routerLink="/new-analysis"
+            class="px-5 py-2.5 rounded-xl bg-primary hover:bg-primary-hover text-white font-semibold text-xs shadow-soft transition-all flex items-center gap-2"
+          >
+            <i class="fa-solid fa-plus text-xs"></i>
+            <span>Create Project & Test SQL</span>
+          </a>
+
+          <button
+            (click)="state.loadInitialWorkspaceSchema()"
+            class="px-4 py-2.5 rounded-xl border border-surface-border dark:border-slate-700 bg-white dark:bg-slate-800 text-content-main dark:text-slate-200 text-xs font-semibold hover:bg-surface-hover dark:hover:bg-slate-700 transition-colors flex items-center gap-2"
+          >
+            <i class="fa-solid fa-flask text-xs text-blue-500"></i>
+            <span>Load Academic Sample Demo</span>
+          </button>
         </div>
       </div>
 

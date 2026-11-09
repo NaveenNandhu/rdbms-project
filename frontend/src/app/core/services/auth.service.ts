@@ -97,8 +97,7 @@ export class AuthService {
     this.isAuthenticated.set(true);
     this.sessionTime.set(timeStr);
 
-    if (!this.projectState.activeProject()) {
-      this.projectState.loadInitialWorkspaceSchema();
-    }
+    this.projectState.resetWorkspace();
+    this.projectState.loadUserProjects();
   }
 }
