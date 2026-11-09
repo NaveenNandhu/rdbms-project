@@ -26,6 +26,17 @@ app.use(cors({
 app.use(express.json({ limit: '20mb' }));
 app.use(express.urlencoded({ extended: true, limit: '20mb' }));
 
+// Root Welcome & Status
+app.get('/', (req, res) => {
+  res.json({
+    status: 'online',
+    message: '🚀 DB Insight AI Backend Engine is running successfully on Render!',
+    healthCheck: '/api/health',
+    apiRoot: '/api',
+    version: '1.0.0'
+  });
+});
+
 // Health Check
 app.get('/api/health', (req, res) => {
   res.json({
