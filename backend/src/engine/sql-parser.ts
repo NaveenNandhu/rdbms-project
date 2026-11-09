@@ -71,6 +71,16 @@ export interface SqlParseResult {
 }
 
 export class SqlParser {
+  private static readonly KNOWN_TYPES = new Set([
+    'INT', 'INTEGER', 'TINYINT', 'SMALLINT', 'MEDIUMINT', 'BIGINT', 'SERIAL', 'BIGSERIAL',
+    'DECIMAL', 'NUMERIC', 'FLOAT', 'DOUBLE', 'REAL', 'DOUBLE PRECISION', 'MONEY',
+    'CHAR', 'VARCHAR', 'TEXT', 'TINYTEXT', 'MEDIUMTEXT', 'LONGTEXT', 'CITEXT', 'CHARACTER',
+    'DATE', 'TIME', 'DATETIME', 'TIMESTAMP', 'TIMESTAMPTZ', 'INTERVAL', 'YEAR',
+    'BOOLEAN', 'BOOL', 'BIT',
+    'BLOB', 'TINYBLOB', 'MEDIUMBLOB', 'LONGBLOB', 'BYTEA', 'BINARY', 'VARBINARY',
+    'JSON', 'JSONB', 'UUID', 'XML', 'ENUM', 'SET', 'INET', 'CIDR', 'MACADDR', 'GEOMETRY', 'POINT'
+  ]);
+
   /**
    * Parse SQL text into structured tables, relationships, and constraint objects.
    */
@@ -91,18 +101,15 @@ export class SqlParser {
 
       if (/^CREATE\s+TABLE/i.test(trimmed)) {
         try {
-          const parsed = this.parseCreateTable(trimmed, stmt.line, dialect, warnings);
+          const parsed = this.parseCreateTable(trimmed, stmt.line, dialect, warnings, errors);
           if (parsed) {
             // Check for duplicate table
             const existing = tables.find(t => t.name.toLowerCase() === parsed.name.toLowerCase());
             if (existing) {
-              warnings.push({
+              errors.push({
                 line: stmt.line,
-                message: `Duplicate table definition for '${parsed.name}'. Previous definition overwritten.`,
-                severity: 'MEDIUM'
+                message: `Duplicate table definition for '${parsed.name}'. A table with this name already exists in this schema.`
               });
-              const idx = tables.indexOf(existing);
-              tables[idx] = parsed;
             } else {
               tables.push(parsed);
             }
@@ -115,11 +122,22 @@ export class SqlParser {
         }
       } else if (/^ALTER\s+TABLE/i.test(trimmed)) {
         this.parseAlterTable(trimmed, stmt.line, tables, warnings, errors);
+      } else if (/^(?:INSERT\s+INTO|SELECT|UPDATE|DELETE|DROP\s+TABLE|CREATE\s+INDEX|CREATE\s+VIEW)/i.test(trimmed)) {
+        warnings.push({
+          line: stmt.line,
+          message: `Non-DDL statement '${trimmed.split(/\s+/)[0].toUpperCase()}' skipped. SQL Validator focuses on table schema definitions (CREATE TABLE, ALTER TABLE).`,
+          severity: 'LOW'
+        });
+      } else {
+        errors.push({
+          line: stmt.line,
+          message: `Syntax error: Unrecognized statement near line ${stmt.line}: "${trimmed.slice(0, 50)}${trimmed.length > 50 ? '...' : ''}". Expected CREATE TABLE or ALTER TABLE.`
+        });
       }
     }
 
     // 3. Deduce candidate keys and relationships across tables
-    const relationships = this.deduceRelationships(tables);
+    const relationships = this.deduceRelationships(tables, warnings, errors);
 
     return {
       tables,
@@ -190,11 +208,36 @@ export class SqlParser {
     stmt: string,
     startLine: number,
     dialect: string,
-    warnings: SqlParseResult['warnings']
+    warnings: SqlParseResult['warnings'],
+    errors: SqlParseResult['errors']
   ): ParsedTable | null {
+    // Check balanced parentheses
+    const openParens = (stmt.match(/\(/g) || []).length;
+    const closeParens = (stmt.match(/\)/g) || []).length;
+    if (openParens !== closeParens) {
+      errors.push({
+        line: startLine,
+        message: `Syntax error in CREATE TABLE: Mismatched parentheses (${openParens} opening '(' vs ${closeParens} closing ')'). Check for unclosed table body or constraint parenthesis.`
+      });
+      return null;
+    }
+
     // Match CREATE TABLE [IF NOT EXISTS] tablename (body)
-    const match = stmt.match(/CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([`"'\w]+)\s*\(([\s\S]+)\)/i);
-    if (!match) return null;
+    const match = stmt.match(/CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([`"'\w]+)\s*\(([\s\S]+)\)(?:\s*[^)]*)?$/i);
+    if (!match) {
+      if (!/CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([`"'\w]+)/i.test(stmt)) {
+        errors.push({
+          line: startLine,
+          message: `Syntax error in CREATE TABLE: Missing or invalid table name.`
+        });
+      } else {
+        errors.push({
+          line: startLine,
+          message: `Syntax error in CREATE TABLE: Malformed table body. Ensure column definitions are enclosed in parentheses.`
+        });
+      }
+      return null;
+    }
 
     const rawTableName = match[1];
     const tableName = this.unquote(rawTableName);
@@ -205,6 +248,7 @@ export class SqlParser {
     const primaryKey: string[] = [];
     const candidateKeys: string[][] = [];
     const foreignKeys: ParsedTable['foreignKeys'] = [];
+    let pkDeclarationCount = 0;
 
     // Split body items by comma, taking care not to split inside parens or quotes
     const items = this.splitBodyItems(body);
@@ -213,12 +257,34 @@ export class SqlParser {
       const trimmed = item.trim();
       if (!trimmed) continue;
 
+      // Check for missing commas between lines: e.g. "col1 INT col2 VARCHAR(50)"
+      const lines = trimmed.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+      if (lines.length > 1) {
+        const colDeclarations = lines.filter(l =>
+          /^[a-zA-Z_]\w*\s+(?:INT|BIGINT|VARCHAR|TEXT|DECIMAL|NUMERIC|DATE|TIMESTAMP|BOOLEAN|CHAR|FLOAT|DOUBLE|SERIAL|UUID)\b/i.test(l)
+        );
+        if (colDeclarations.length > 1) {
+          errors.push({
+            line: startLine,
+            message: `Syntax error in table '${tableName}': Missing comma delimiter between column definitions near "${lines[0]}".`
+          });
+        }
+      }
+
       // Table-level PRIMARY KEY constraint
       if (/^(?:CONSTRAINT\s+[`"'\w]+\s+)?PRIMARY\s+KEY\s*\(([\s\S]+)\)/i.test(trimmed)) {
+        pkDeclarationCount++;
+        if (pkDeclarationCount > 1) {
+          errors.push({
+            line: startLine,
+            message: `Syntax error in table '${tableName}': Multiple PRIMARY KEY definitions are not permitted. A table can have at most one PRIMARY KEY constraint.`
+          });
+        }
+
         const pkMatch = trimmed.match(/^(?:CONSTRAINT\s+([`"'\w]+)\s+)?PRIMARY\s+KEY\s*\(([\s\S]+)\)/i);
         if (pkMatch) {
           const cName = pkMatch[1] ? this.unquote(pkMatch[1]) : `pk_${tableName}`;
-          const pkCols = pkMatch[2].split(',').map(c => this.unquote(c.trim()));
+          const pkCols = pkMatch[2].split(',').map(c => this.unquote(c.trim())).filter(c => c.length > 0);
           for (const pkCol of pkCols) {
             if (!primaryKey.includes(pkCol)) primaryKey.push(pkCol);
             const colObj = columns.find(c => c.name.toLowerCase() === pkCol.toLowerCase());
@@ -244,9 +310,9 @@ export class SqlParser {
         );
         if (fkMatch) {
           const cName = fkMatch[1] ? this.unquote(fkMatch[1]) : `fk_${tableName}_${Date.now()}`;
-          const srcCols = fkMatch[2].split(',').map(c => this.unquote(c.trim()));
+          const srcCols = fkMatch[2].split(',').map(c => this.unquote(c.trim())).filter(c => c.length > 0);
           const tgtTable = this.unquote(fkMatch[3]);
-          const tgtCols = fkMatch[4].split(',').map(c => this.unquote(c.trim()));
+          const tgtCols = fkMatch[4].split(',').map(c => this.unquote(c.trim())).filter(c => c.length > 0);
           const rest = fkMatch[5] || '';
 
           const onDelete = (rest.match(/ON\s+DELETE\s+(CASCADE|RESTRICT|SET\s+NULL|NO\s+ACTION)/i) || [])[1];
@@ -283,7 +349,7 @@ export class SqlParser {
         const uMatch = trimmed.match(/^(?:CONSTRAINT\s+([`"'\w]+)\s+)?UNIQUE\s*(?:KEY|INDEX)?\s*\(([\s\S]+)\)/i);
         if (uMatch) {
           const cName = uMatch[1] ? this.unquote(uMatch[1]) : `uq_${tableName}`;
-          const uCols = uMatch[2].split(',').map(c => this.unquote(c.trim()));
+          const uCols = uMatch[2].split(',').map(c => this.unquote(c.trim())).filter(c => c.length > 0);
           candidateKeys.push(uCols);
           if (uCols.length === 1) {
             const colObj = columns.find(c => c.name.toLowerCase() === uCols[0].toLowerCase());
@@ -314,12 +380,32 @@ export class SqlParser {
       }
 
       // Otherwise parse as column definition
-      const col = this.parseColumnDefinition(trimmed, tableName, warnings);
+      const col = this.parseColumnDefinition(trimmed, tableName, warnings, errors);
       if (col) {
-        columns.push(col);
-        if (col.isPrimaryKey && !primaryKey.includes(col.name)) {
-          primaryKey.push(col.name);
+        // Check for duplicate column name
+        const duplicate = columns.find(c => c.name.toLowerCase() === col.name.toLowerCase());
+        if (duplicate) {
+          errors.push({
+            line: startLine,
+            message: `Syntax error in table '${tableName}': Duplicate column name '${col.name}'. Column names within a table must be unique.`
+          });
+        } else {
+          columns.push(col);
         }
+
+        if (col.isPrimaryKey) {
+          pkDeclarationCount++;
+          if (pkDeclarationCount > 1) {
+            errors.push({
+              line: startLine,
+              message: `Syntax error in table '${tableName}': Multiple PRIMARY KEY definitions found. Column '${col.name}' is declared as PRIMARY KEY, but another PRIMARY KEY is already defined.`
+            });
+          }
+          if (!primaryKey.includes(col.name)) {
+            primaryKey.push(col.name);
+          }
+        }
+
         if (col.isUnique) {
           candidateKeys.push([col.name]);
         }
@@ -360,13 +446,17 @@ export class SqlParser {
   private static parseColumnDefinition(
     def: string,
     tableName: string,
-    warnings: SqlParseResult['warnings']
+    warnings: SqlParseResult['warnings'],
+    errors: SqlParseResult['errors']
   ): ParsedColumn | null {
-    // E.g. "student_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY"
-    // E.g. "email VARCHAR(255) UNIQUE NOT NULL"
-    // E.g. "course_id INT REFERENCES courses(id) ON DELETE CASCADE"
     const tokens = def.trim().split(/\s+/);
-    if (tokens.length < 2) return null;
+    if (tokens.length < 2) {
+      errors.push({
+        line: undefined,
+        message: `Syntax error in table '${tableName}': Incomplete column definition '${def}'. Expected column name and data type.`
+      });
+      return null;
+    }
 
     const colName = this.unquote(tokens[0]);
     // Skip MySQL KEY / INDEX keywords if defined at table level
@@ -378,7 +468,6 @@ export class SqlParser {
     let dataType = tokens[1];
     let tokenIndex = 2;
     if (tokens[1].includes('(') && !tokens[1].includes(')')) {
-      // Re-join parentheses tokens if split by space
       while (tokenIndex < tokens.length) {
         dataType += ' ' + tokens[tokenIndex];
         if (tokens[tokenIndex].includes(')')) {
@@ -387,6 +476,16 @@ export class SqlParser {
         }
         tokenIndex++;
       }
+    }
+
+    // Check data type
+    const baseType = dataType.replace(/\(.*?\)/g, '').trim().toUpperCase();
+    if (!this.KNOWN_TYPES.has(baseType)) {
+      warnings.push({
+        line: undefined,
+        message: `Unrecognized or non-standard SQL data type '${dataType}' for column '${colName}' in table '${tableName}'.`,
+        severity: 'MEDIUM'
+      });
     }
 
     const rest = tokens.slice(tokenIndex).join(' ');
@@ -524,12 +623,58 @@ export class SqlParser {
     return items;
   }
 
-  private static deduceRelationships(tables: ParsedTable[]) {
+  private static deduceRelationships(
+    tables: ParsedTable[],
+    warnings: SqlParseResult['warnings'],
+    errors: SqlParseResult['errors']
+  ) {
     const relationships: SqlParseResult['relationships'] = [];
 
     for (const table of tables) {
       for (const fk of table.foreignKeys) {
+        // Validate local column exists in current table
+        const localCol = table.columns.find(c => c.name.toLowerCase() === fk.column.toLowerCase());
+        if (!localCol) {
+          errors.push({
+            line: undefined,
+            message: `Semantic error in table '${table.name}': Foreign key references local column '${fk.column}', but column does not exist in '${table.name}'.`
+          });
+        }
+
+        // Validate target table exists
         const targetTableObj = tables.find(t => t.name.toLowerCase() === fk.targetTable.toLowerCase());
+        if (!targetTableObj) {
+          warnings.push({
+            line: undefined,
+            message: `Foreign key in table '${table.name}' references undefined table '${fk.targetTable}'. Referenced table must be declared.`,
+            severity: 'HIGH'
+          });
+          continue;
+        }
+
+        // Validate target column exists in target table
+        const targetColObj = targetTableObj.columns.find(c => c.name.toLowerCase() === fk.targetColumn.toLowerCase());
+        if (!targetColObj) {
+          warnings.push({
+            line: undefined,
+            message: `Foreign key '${fk.column}' in table '${table.name}' references column '${fk.targetColumn}' in table '${fk.targetTable}', but '${fk.targetTable}' has no such column.`,
+            severity: 'HIGH'
+          });
+          continue;
+        }
+
+        // Check data type compatibility
+        if (localCol && targetColObj) {
+          const localBaseType = localCol.dataType.replace(/\(.*?\)/g, '').trim();
+          const targetBaseType = targetColObj.dataType.replace(/\(.*?\)/g, '').trim();
+          if (localBaseType !== targetBaseType) {
+            warnings.push({
+              line: undefined,
+              message: `Data type mismatch: '${table.name}.${fk.column}' (${localCol.dataType}) references '${fk.targetTable}.${fk.targetColumn}' (${targetColObj.dataType}). Relational keys should share the same data type.`,
+              severity: 'MEDIUM'
+            });
+          }
+        }
 
         // Check if source column is unique or primary key
         const isFkUnique = table.candidateKeys.some(ck => ck.length === 1 && ck[0].toLowerCase() === fk.column.toLowerCase());

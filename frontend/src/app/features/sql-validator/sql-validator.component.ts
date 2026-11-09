@@ -1,6 +1,7 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { Router } from '@angular/router';
 import { ApiService } from '../../core/services/api.service';
 import { ProjectStateService } from '../../core/services/project-state.service';
 
@@ -58,6 +59,13 @@ import { ProjectStateService } from '../../core/services/project-state.service';
             class="px-3 py-1.5 rounded-xl border border-surface-border dark:border-slate-700 bg-surface-subtle dark:bg-slate-800 hover:bg-surface-hover dark:hover:bg-slate-700 text-content-main dark:text-slate-200 text-xs font-medium transition-colors"
           >
             E-Commerce Sample
+          </button>
+          <button
+            (click)="loadSample('invalid')"
+            class="px-3 py-1.5 rounded-xl border border-red-300 dark:border-red-900/50 bg-red-50 dark:bg-red-950/30 hover:bg-red-100/70 text-red-700 dark:text-red-300 text-xs font-semibold flex items-center gap-1.5 transition-colors"
+          >
+            <i class="fa-solid fa-bug text-xs"></i>
+            <span>Broken SQL Sample</span>
           </button>
           <button
             (click)="clearSql()"
@@ -143,6 +151,22 @@ import { ProjectStateService } from '../../core/services/project-state.service';
               </div>
               <div class="font-bold text-content-main dark:text-slate-100">No Syntax or Semantic Errors Found!</div>
               <div class="mt-1">All CREATE TABLE statements adhere to valid {{ dialect | uppercase }} grammar.</div>
+
+              <!-- Bridge to Relational Normalization Engine -->
+              <div *ngIf="sqlInput.trim()" class="mt-5 pt-4 border-t border-surface-border dark:border-slate-800 space-y-2">
+                <p class="text-[11px] text-content-muted dark:text-slate-400">
+                  Ready to test for relational design violations (1NF repeating groups, 2NF partial dependencies, 3NF transitive dependencies)?
+                </p>
+                <button
+                  (click)="sendToNormalization()"
+                  [disabled]="isAnalyzing()"
+                  class="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-soft transition-all inline-flex items-center gap-2"
+                >
+                  <i *ngIf="isAnalyzing()" class="fa-solid fa-spinner fa-spin text-xs"></i>
+                  <i *ngIf="!isAnalyzing()" class="fa-solid fa-brain text-xs"></i>
+                  <span>{{ isAnalyzing() ? 'Running Normalization Engine...' : 'Run Normalization Analysis (1NF / 2NF / 3NF) →' }}</span>
+                </button>
+              </div>
             </div>
           </div>
 
@@ -170,11 +194,13 @@ import { ProjectStateService } from '../../core/services/project-state.service';
 })
 export class SqlValidatorComponent implements OnInit {
   private api = inject(ApiService);
+  private router = inject(Router);
   public state = inject(ProjectStateService);
 
   public sqlInput: string = '';
   public dialect: string = 'postgresql';
   public isValidating = signal<boolean>(false);
+  public isAnalyzing = signal<boolean>(false);
   public validationErrors = signal<any[]>([]);
   public validationWarnings = signal<any[]>([]);
   public correctedSql = signal<string>('');
@@ -213,7 +239,7 @@ export class SqlValidatorComponent implements OnInit {
     this.validationWarnings.set([]);
   }
 
-  public loadSample(type: 'hospital' | 'ecommerce') {
+  public loadSample(type: 'hospital' | 'ecommerce' | 'invalid') {
     if (type === 'hospital') {
       this.sqlInput = `CREATE TABLE patients (
   patient_id INT PRIMARY KEY,
@@ -238,7 +264,7 @@ CREATE TABLE appointments (
   FOREIGN KEY (patient_id) REFERENCES patients(patient_id),
   FOREIGN KEY (doctor_id) REFERENCES doctors(doctor_id)
 );`;
-    } else {
+    } else if (type === 'ecommerce') {
       this.sqlInput = `CREATE TABLE customers (
   customer_id INT PRIMARY KEY,
   full_name VARCHAR(100) NOT NULL,
@@ -261,8 +287,44 @@ CREATE TABLE order_items (
   price NUMERIC(10, 2) NOT NULL,
   FOREIGN KEY (order_id) REFERENCES orders(order_id)
 );`;
+    } else if (type === 'invalid') {
+      this.sqlInput = `-- Schema with intentional syntax and DDL constraint errors for testing
+CREATE TABLE students (
+  student_id INT PRIMARY KEY,
+  student_code VARCHAR(20) PRIMARY KEY, -- Multiple PRIMARY KEYs
+  first_name VARCHAR(50)
+  last_name VARCHAR(50) NOT NULL,       -- Missing comma delimiter
+  first_name VARCHAR(100),              -- Duplicate column 'first_name'
+  dept_id INT REFERENCES unknown_departments(dept_id), -- Non-existent referenced table
+  notes CUSTOM_BAD_TYPE                 -- Non-standard SQL data type
+);
+
+CREATE TABLE broken_enrollment (        -- Missing closing parenthesis
+  enrollment_id INT PRIMARY KEY,
+  student_id INT NOT NULL;
+`;
     }
     this.validateSql();
+  }
+
+  public sendToNormalization() {
+    if (!this.sqlInput.trim()) return;
+    this.isAnalyzing.set(true);
+    this.api.executeAnalysis({
+      projectTitle: 'SQL Analysis',
+      sql: this.sqlInput,
+      dialect: this.dialect
+    }).subscribe({
+      next: (res: any) => {
+        this.isAnalyzing.set(false);
+        this.state.setAnalysis(res);
+        this.router.navigate(['/normalization']);
+      },
+      error: (err: any) => {
+        this.isAnalyzing.set(false);
+        alert(err?.error?.error || 'Failed to analyze normalization. Ensure schema is syntactically valid.');
+      }
+    });
   }
 
   public validateSql() {
