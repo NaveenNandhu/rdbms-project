@@ -27,7 +27,7 @@ router.get('/projects/:id', authenticateToken, ProjectController.getProject);
 router.delete('/projects/:id', authenticateToken, ProjectController.deleteProject);
 
 // --- Analysis Engine Routes ---
-router.post('/analysis/preview-sql', authenticateToken, AnalysisController.previewSql);
+router.post('/analysis/preview-sql', optionalAuthenticateToken, AnalysisController.previewSql);
 router.post('/analysis/parse-diagram', authenticateToken, upload.single('diagram'), AnalysisController.parseDiagramImage);
 router.post('/analysis/execute', authenticateToken, AnalysisController.executeAnalysis);
 router.post('/analysis/add-fd', authenticateToken, AnalysisController.addCustomFd);
