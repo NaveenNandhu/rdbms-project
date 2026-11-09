@@ -73,7 +73,7 @@ export class ApiService {
 
   // --- Analysis Engine ---
   previewSql(sql: string, dialect: string = 'postgresql'): Observable<any> {
-    return this.http.post(`${this.baseUrl}/analysis/preview-sql`, { sql, dialect });
+    return this.http.post(`${this.baseUrl}/analysis/preview-sql`, { sql, dialect }, { headers: this.getHeaders() });
   }
 
   parseDiagram(formData: FormData): Observable<any> {
