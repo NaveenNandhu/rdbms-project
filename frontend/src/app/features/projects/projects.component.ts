@@ -212,12 +212,19 @@ export class ProjectsComponent implements OnInit {
       description: this.newDesc,
       dialect: this.newDialect
     }).subscribe({
-      next: () => {
+      next: (res: any) => {
         this.isCreating.set(false);
         this.showCreateModal.set(false);
+        const newProj = res.project;
         this.newTitle = '';
         this.newDesc = '';
-        this.loadProjects();
+        if (newProj) {
+          this.state.activeProject.set(newProj);
+          this.state.activeAnalysis.set(null);
+          this.router.navigate(['/new-analysis']);
+        } else {
+          this.loadProjects();
+        }
       },
       error: (err: any) => {
         this.isCreating.set(false);

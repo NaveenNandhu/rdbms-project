@@ -1,7 +1,7 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Router, ActivatedRoute } from '@angular/router';
+import { Router, ActivatedRoute, RouterModule } from '@angular/router';
 import { ApiService } from '../../core/services/api.service';
 import { ProjectStateService } from '../../core/services/project-state.service';
 import { ParsedTable } from '../../core/models/schema.models';
@@ -30,9 +30,33 @@ interface EditableTable {
 @Component({
   selector: 'app-new-analysis',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, RouterModule],
   template: `
     <div class="max-w-6xl mx-auto space-y-6 fade-in pb-12">
+      <!-- Active Project Workspace Banner (When an active project exists) -->
+      <div *ngIf="activeProject()" class="p-4 rounded-2xl bg-gradient-to-r from-blue-700 via-blue-600 to-indigo-700 text-white shadow-soft flex flex-wrap items-center justify-between gap-4 border border-blue-500/30">
+        <div class="flex items-center gap-3.5">
+          <div class="w-11 h-11 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center text-xl shadow-inner">
+            <i class="fa-solid fa-database"></i>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="text-[11px] font-bold uppercase tracking-wider text-blue-200">Active Project Workspace</span>
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-white/25 text-white uppercase">{{ activeProject()?.dialect || sqlDialect }}</span>
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-bold" [ngClass]="activeProject()?.status === 'ANALYZED' ? 'bg-emerald-500/30 text-emerald-100' : 'bg-amber-400/30 text-amber-100'">{{ activeProject()?.status || 'DRAFT' }}</span>
+            </div>
+            <h2 class="text-base font-extrabold tracking-tight mt-0.5">{{ activeProject()?.title }}</h2>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2.5">
+          <a routerLink="/projects" class="px-3.5 py-2 rounded-xl bg-white/15 hover:bg-white/25 text-xs font-semibold text-white transition-all backdrop-blur-sm flex items-center gap-1.5 border border-white/20">
+            <i class="fa-solid fa-list-check text-xs"></i>
+            <span>Switch / All Projects</span>
+          </a>
+        </div>
+      </div>
+
       <!-- Header -->
       <div class="flex items-center justify-between border-b border-surface-border dark:border-slate-800 pb-4">
         <div>
@@ -92,16 +116,32 @@ interface EditableTable {
           </button>
         </div>
 
-        <!-- TAB 1: SQL CODE -->
+        <!-- TAB 1: SQL CODE & NORMALIZATION TESTING -->
         <div *ngIf="activeTab === 'sql'" class="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-surface-border dark:border-slate-800 shadow-soft space-y-4 transition-colors">
           <div class="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h2 class="font-bold text-sm text-content-main dark:text-slate-100">Enter, Paste or Upload Your SQL DDL</h2>
-              <p class="text-xs text-content-muted dark:text-slate-400">Type your own CREATE TABLE statements with constraints, primary keys, and foreign keys.</p>
+              <h2 class="font-bold text-sm text-content-main dark:text-slate-100 flex items-center gap-2">
+                <i class="fa-solid fa-code text-primary"></i>
+                <span>SQL Code Input & Normalization Testing</span>
+              </h2>
+              <p class="text-xs text-content-muted dark:text-slate-400">
+                Write or paste CREATE TABLE statements, upload .sql files, and test 1NF, 2NF, 3NF normalization rules.
+              </p>
             </div>
-            <div class="flex items-center gap-3">
+            <div class="flex flex-wrap items-center gap-2.5">
+              <!-- Load Normalization Violation Sample -->
+              <button
+                type="button"
+                (click)="loadNormalizationViolationSample()"
+                class="px-3 py-1.5 rounded-xl bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-xs"
+                title="Load a test schema with intentional 1NF, 2NF, and 3NF normalization flaws"
+              >
+                <i class="fa-solid fa-flask-vial text-blue-600 dark:text-blue-400"></i>
+                <span>Load Normalization Test Sample</span>
+              </button>
+
               <!-- Dialect Dropdown -->
-              <div class="flex items-center gap-2 text-xs">
+              <div class="flex items-center gap-1.5 text-xs">
                 <span class="text-content-muted dark:text-slate-400">Dialect:</span>
                 <select [(ngModel)]="sqlDialect" class="border border-surface-border dark:border-slate-700 rounded-xl px-2.5 py-1 text-xs font-medium bg-white dark:bg-slate-800 text-content-main dark:text-slate-100">
                   <option value="postgresql">PostgreSQL</option>
@@ -114,16 +154,20 @@ interface EditableTable {
               <input
                 [(ngModel)]="projectTitle"
                 placeholder="Project Name"
-                class="px-3 py-1 text-xs border border-surface-border dark:border-slate-700 rounded-xl w-52 bg-surface-subtle dark:bg-slate-800 text-content-main dark:text-slate-100"
+                class="px-3 py-1 text-xs border border-surface-border dark:border-slate-700 rounded-xl w-48 bg-surface-subtle dark:bg-slate-800 text-content-main dark:text-slate-100"
               />
             </div>
           </div>
 
           <!-- File upload drag & drop bar -->
-          <div class="border border-dashed border-gray-300 dark:border-slate-700 rounded-2xl p-3 bg-surface-subtle/50 dark:bg-slate-800/40 flex items-center justify-between">
+          <div class="border border-dashed border-gray-300 dark:border-slate-700 rounded-2xl p-3 bg-surface-subtle/50 dark:bg-slate-800/40 flex flex-wrap items-center justify-between gap-2">
             <div class="flex items-center space-x-2 text-xs text-content-muted dark:text-slate-400">
               <i class="fa-solid fa-folder-open text-primary-500"></i>
               <span>Upload your .sql file:</span>
+              <span *ngIf="uploadedSqlFileName()" class="px-2.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-bold font-mono text-[11px] flex items-center gap-1">
+                <i class="fa-solid fa-check text-[10px]"></i>
+                <span>{{ uploadedSqlFileName() }}</span>
+              </span>
             </div>
             <input type="file" accept=".sql" (change)="onSqlFileUpload($event)" class="text-xs file:mr-2 file:py-1 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-primary-50 dark:file:bg-primary-950 file:text-primary-700 dark:file:text-primary-300 hover:file:bg-primary-100" />
           </div>
@@ -135,7 +179,7 @@ interface EditableTable {
               (ngModelChange)="onSqlCodeChange()"
               rows="13"
               class="w-full font-mono text-xs p-4 rounded-xl border border-surface-border dark:border-slate-700 bg-gray-900 text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary/50"
-              placeholder="-- Paste or write your custom CREATE TABLE statements here...&#10;CREATE TABLE patients (&#10;  patient_id INT PRIMARY KEY,&#10;  full_name VARCHAR(100) NOT NULL,&#10;  dob DATE&#10;);"
+              placeholder="-- Paste or write your custom CREATE TABLE statements here...&#10;CREATE TABLE department (&#10;  dept_id INT PRIMARY KEY,&#10;  dept_name VARCHAR(100) NOT NULL&#10;);"
             ></textarea>
           </div>
 
@@ -146,27 +190,175 @@ interface EditableTable {
               <span>Tables detected: <strong class="text-content-main dark:text-slate-100">{{ countTablesInSql() }}</strong></span>
             </div>
 
-            <div class="flex items-center space-x-3">
-              <!-- Quick Direct Analysis Button -->
+            <div class="flex flex-wrap items-center gap-2.5">
+              <!-- Test SQL Validations Button -->
+              <button
+                type="button"
+                (click)="testSqlValidation()"
+                [disabled]="!sqlCode.trim() || isValidatingSql()"
+                class="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-xs shadow-soft transition-all flex items-center gap-2"
+                title="Check syntax grammar, AST integrity, and 1NF/2NF/3NF normalization violations"
+              >
+                <i *ngIf="isValidatingSql()" class="fa-solid fa-spinner fa-spin text-xs"></i>
+                <i *ngIf="!isValidatingSql()" class="fa-solid fa-vial-circle-check text-xs"></i>
+                <span>{{ isValidatingSql() ? 'Validating...' : 'Test SQL Validations' }}</span>
+              </button>
+
+              <!-- Quick Direct Analysis / Normalization Test Button -->
               <button
                 (click)="analyzeSqlDirectly()"
                 [disabled]="!sqlCode.trim() || isProcessing()"
                 class="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs shadow-soft transition-all flex items-center gap-2"
                 title="Immediately run full normalization and integrity analysis on your SQL"
               >
-                <i class="fa-solid fa-bolt text-xs"></i>
-                <span>{{ isProcessing() ? 'Analyzing...' : 'Analyze This SQL Directly' }}</span>
+                <i *ngIf="isProcessing()" class="fa-solid fa-spinner fa-spin text-xs"></i>
+                <i *ngIf="!isProcessing()" class="fa-solid fa-bolt text-xs"></i>
+                <span>{{ isProcessing() ? 'Running Normalization...' : 'Run Normalization Test (1NF / 2NF / 3NF) →' }}</span>
               </button>
 
               <!-- Review in Step 2 -->
               <button
                 (click)="processSqlInput()"
                 [disabled]="!sqlCode.trim() || isProcessing()"
-                class="px-5 py-2.5 rounded-xl bg-primary hover:bg-primary-hover disabled:opacity-50 text-white font-semibold text-xs shadow-soft transition-all flex items-center gap-2"
+                class="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold text-xs transition-all flex items-center gap-1.5"
               >
                 <span>Review Extracted Schema</span>
                 <i class="fa-solid fa-arrow-right text-[10px]"></i>
               </button>
+            </div>
+          </div>
+
+          <!-- INLINE DIAGNOSTICS & NORMALIZATION REPORT -->
+          <div *ngIf="hasValidatedSql()" class="space-y-4 pt-3 border-t border-surface-border dark:border-slate-800 fade-in">
+            <!-- Header bar of test results -->
+            <div
+              class="p-4 rounded-2xl border flex flex-wrap items-center justify-between gap-3 text-xs shadow-xs"
+              [ngClass]="validationErrors().length > 0 
+                ? 'bg-red-50/80 dark:bg-red-950/30 border-red-200 dark:border-red-800/50 text-red-800 dark:text-red-200' 
+                : (hasNormalizationFlaws() 
+                  ? 'bg-amber-50/80 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800/50 text-amber-900 dark:text-amber-200' 
+                  : 'bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800/50 text-emerald-800 dark:text-emerald-200')"
+            >
+              <div class="flex items-center gap-2.5">
+                <i *ngIf="validationErrors().length > 0" class="fa-solid fa-triangle-exclamation text-base text-red-600"></i>
+                <i *ngIf="validationErrors().length === 0 && hasNormalizationFlaws()" class="fa-solid fa-circle-exclamation text-base text-amber-600"></i>
+                <i *ngIf="validationErrors().length === 0 && !hasNormalizationFlaws()" class="fa-solid fa-circle-check text-base text-emerald-600"></i>
+                <div>
+                  <div class="font-bold text-sm">
+                    <span *ngIf="validationErrors().length > 0">SQL Syntax & Grammar Issues Found ({{ validationErrors().length }})</span>
+                    <span *ngIf="validationErrors().length === 0 && hasNormalizationFlaws()">Valid SQL Syntax • Normalization Violations Detected ({{ getNormalizationFlawsCount() }})</span>
+                    <span *ngIf="validationErrors().length === 0 && !hasNormalizationFlaws()">SQL Syntax & Constraints Validated Successfully</span>
+                  </div>
+                  <div class="text-[11px] opacity-90 mt-0.5">
+                    {{ validatedTables().length }} table(s) parsed • Ready for normalization decomposition and database synthesis
+                  </div>
+                </div>
+              </div>
+
+              <div class="flex items-center gap-2">
+                <button
+                  (click)="analyzeSqlDirectly()"
+                  [disabled]="isProcessing()"
+                  class="px-4 py-2 rounded-xl bg-primary hover:bg-primary-hover text-white font-bold text-xs shadow-soft transition-all flex items-center gap-2"
+                >
+                  <i *ngIf="isProcessing()" class="fa-solid fa-spinner fa-spin text-xs"></i>
+                  <i *ngIf="!isProcessing()" class="fa-solid fa-diagram-project text-xs"></i>
+                  <span>{{ isProcessing() ? 'Running...' : 'Run Normalization Lab (1NF/2NF/3NF) →' }}</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Syntax Errors List (if any) -->
+            <div *ngIf="validationErrors().length > 0" class="p-4 rounded-2xl bg-red-50/60 dark:bg-red-950/20 border border-red-200 dark:border-red-900/40 space-y-2">
+              <h4 class="font-bold text-xs text-red-700 dark:text-red-300 flex items-center gap-2">
+                <i class="fa-solid fa-bug"></i>
+                <span>Syntax & Grammar Errors</span>
+              </h4>
+              <div class="space-y-1.5">
+                <div *ngFor="let err of validationErrors()" class="text-xs text-red-600 dark:text-red-400 font-mono bg-white dark:bg-slate-900/60 p-2 rounded-lg border border-red-100 dark:border-red-900/30 flex items-start gap-2">
+                  <span *ngIf="err.line" class="font-bold text-red-500 whitespace-nowrap">Line {{ err.line }}:</span>
+                  <span>{{ err.message }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Normalization Test Findings (1NF / 2NF / 3NF) -->
+            <div *ngIf="normalizationResults().length > 0" class="space-y-3">
+              <h4 class="font-bold text-xs text-content-main dark:text-slate-100 flex items-center gap-2">
+                <i class="fa-solid fa-filter-circle-dollar text-primary"></i>
+                <span>Relational Normalization Test Results (1NF / 2NF / 3NF / BCNF)</span>
+              </h4>
+
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div *ngFor="let norm of normalizationResults()" class="p-4 rounded-2xl border border-surface-border dark:border-slate-800 bg-surface-subtle/30 dark:bg-slate-800/30 space-y-3">
+                  <div class="flex items-center justify-between">
+                    <span class="font-bold text-xs text-content-main dark:text-slate-100 font-mono">{{ norm.tableName }}</span>
+                    <span
+                      class="px-2 py-0.5 rounded-full text-[10px] font-bold"
+                      [ngClass]="norm.overallRank === 'BCNF' || norm.overallRank === '3NF' 
+                        ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300' 
+                        : 'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300'"
+                    >
+                      Highest Form: {{ norm.overallRank }}
+                    </span>
+                  </div>
+
+                  <!-- 1NF, 2NF, 3NF Badges -->
+                  <div class="grid grid-cols-3 gap-2 text-center text-xs">
+                    <div class="p-2 rounded-xl border" [ngClass]="norm.oneNF?.status === 'PASS' ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300' : 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800 text-red-700 dark:text-red-300'">
+                      <div class="font-bold text-[11px]">1NF</div>
+                      <div class="text-[10px] font-semibold">{{ norm.oneNF?.status }}</div>
+                    </div>
+                    <div class="p-2 rounded-xl border" [ngClass]="norm.twoNF?.status === 'PASS' ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300' : 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800 text-red-700 dark:text-red-300'">
+                      <div class="font-bold text-[11px]">2NF</div>
+                      <div class="text-[10px] font-semibold">{{ norm.twoNF?.status }}</div>
+                    </div>
+                    <div class="p-2 rounded-xl border" [ngClass]="norm.threeNF?.status === 'PASS' ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300' : 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800 text-red-700 dark:text-red-300'">
+                      <div class="font-bold text-[11px]">3NF</div>
+                      <div class="text-[10px] font-semibold">{{ norm.threeNF?.status }}</div>
+                    </div>
+                  </div>
+
+                  <!-- Issues details -->
+                  <div *ngIf="getTableIssues(norm).length > 0" class="space-y-1.5 pt-1">
+                    <div *ngFor="let iss of getTableIssues(norm)" class="text-[11px] p-2 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/30 text-amber-900 dark:text-amber-200">
+                      <span class="font-bold">[{{ iss.form }} {{ iss.title }}]:</span> {{ iss.explanation }}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Detected Tables Inspector -->
+            <div *ngIf="validatedTables().length > 0" class="p-4 rounded-2xl border border-surface-border dark:border-slate-800 bg-surface-subtle/20 dark:bg-slate-800/20 space-y-3">
+              <div class="flex items-center justify-between text-xs">
+                <span class="font-bold text-content-main dark:text-slate-100 flex items-center gap-1.5">
+                  <i class="fa-solid fa-table text-primary"></i>
+                  <span>Parsed Tables Inspector ({{ validatedTables().length }})</span>
+                </span>
+                <span class="text-content-muted dark:text-slate-400">Deterministic AST Extract</span>
+              </div>
+
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div *ngFor="let tbl of validatedTables()" class="p-3 bg-white dark:bg-slate-900 rounded-xl border border-surface-border dark:border-slate-800 text-xs space-y-2">
+                  <div class="flex items-center justify-between">
+                    <span class="font-bold text-content-main dark:text-slate-100 font-mono text-sm">{{ tbl.name }}</span>
+                    <span class="text-[11px] text-content-muted dark:text-slate-400">{{ tbl.columns.length }} columns</span>
+                  </div>
+
+                  <div class="flex flex-wrap gap-1.5">
+                    <span
+                      *ngFor="let col of tbl.columns"
+                      class="px-2 py-0.5 rounded-lg text-[10px] font-mono border"
+                      [ngClass]="col.isPrimaryKey ? 'bg-amber-50 dark:bg-amber-950 border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-200 font-bold' : (col.isForeignKey ? 'bg-blue-50 dark:bg-blue-950 border-blue-300 dark:border-blue-700 text-blue-800 dark:text-blue-200' : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300')"
+                    >
+                      {{ col.name }} <span class="opacity-75 text-[9px]">({{ col.dataType }})</span>
+                      <strong *ngIf="col.isPrimaryKey" class="ml-1 text-amber-600 dark:text-amber-400">PK</strong>
+                      <strong *ngIf="col.isForeignKey" class="ml-1 text-blue-600 dark:text-blue-400">FK</strong>
+                    </span>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -786,10 +978,11 @@ interface EditableTable {
 })
 export class NewAnalysisComponent implements OnInit {
   private api = inject(ApiService);
-  private state = inject(ProjectStateService);
+  public state = inject(ProjectStateService);
   private router = inject(Router);
   private route = inject(ActivatedRoute);
 
+  public activeProject = this.state.activeProject;
   public currentStep = signal<'input' | 'confirm'>('input');
   public activeTab: 'sql' | 'diagram' | 'builder' = 'sql';
   public isProcessing = signal<boolean>(false);
@@ -798,9 +991,19 @@ export class NewAnalysisComponent implements OnInit {
   public showDiagramPreview = signal<boolean>(true);
   public isDiagramModalOpen = signal<boolean>(false);
 
+  // SQL & Validation state
   public sqlCode: string = '';
   public sqlDialect: string = 'postgresql';
   public projectTitle: string = 'Custom Database Design';
+  public uploadedSqlFileName = signal<string | null>(null);
+
+  public isValidatingSql = signal<boolean>(false);
+  public hasValidatedSql = signal<boolean>(false);
+  public validationErrors = signal<Array<{ line?: number; message: string }>>([]);
+  public validationWarnings = signal<Array<{ line?: number; message: string; severity?: string }>>([]);
+  public validatedTables = signal<ParsedTable[]>([]);
+  public normalizationResults = signal<any[]>([]);
+  public validationSuccessMessage = signal<string | null>(null);
 
   public uploadedFile: File | null = null;
   public editableTables: EditableTable[] = [];
@@ -842,7 +1045,13 @@ export class NewAnalysisComponent implements OnInit {
       }
     });
 
-    this.projectTitle = 'Custom Relational Database';
+    const currentProj = this.state.activeProject();
+    if (currentProj) {
+      this.projectTitle = currentProj.title || 'My Database Project';
+      this.sqlDialect = currentProj.dialect || 'postgresql';
+    } else {
+      this.projectTitle = 'Custom Relational Database';
+    }
     this.sqlCode = '';
     this.editableTables = [];
   }
@@ -863,9 +1072,11 @@ export class NewAnalysisComponent implements OnInit {
   }
 
   public onSqlCodeChange() {
-    const detectedName = this.detectMainTableName(this.sqlCode);
-    if (detectedName) {
-      this.projectTitle = `${detectedName.charAt(0).toUpperCase() + detectedName.slice(1).replace(/_/g, ' ')} Database`;
+    if (!this.state.activeProject()) {
+      const detectedName = this.detectMainTableName(this.sqlCode);
+      if (detectedName) {
+        this.projectTitle = `${detectedName.charAt(0).toUpperCase() + detectedName.slice(1).replace(/_/g, ' ')} Database`;
+      }
     }
   }
 
@@ -880,15 +1091,143 @@ export class NewAnalysisComponent implements OnInit {
   }
 
   public onSqlFileUpload(event: any) {
-    const file = event.target.files[0];
+    const file = event.target?.files?.[0];
     if (file) {
+      this.uploadedSqlFileName.set(file.name);
       const reader = new FileReader();
       reader.onload = (e: any) => {
         this.sqlCode = e.target.result;
-        this.projectTitle = file.name.replace(/\.sql$/i, '').replace(/[_-]/g, ' ');
+        if (!this.state.activeProject()) {
+          this.projectTitle = file.name.replace(/\.sql$/i, '').replace(/[_-]/g, ' ');
+        }
+        this.testSqlValidation();
       };
       reader.readAsText(file);
     }
+  }
+
+  public loadNormalizationViolationSample() {
+    this.sqlCode = `-- University Enrollment & Department Management Schema
+-- Test Schema containing intentional 1NF, 2NF, and 3NF Normalization Violations
+
+CREATE TABLE department (
+    dept_id INT PRIMARY KEY,
+    dept_name VARCHAR(100) NOT NULL,
+    building VARCHAR(100)
+);
+
+CREATE TABLE student_course_registration (
+    -- Composite Primary Key: (student_id, course_id)
+    student_id INT NOT NULL,
+    course_id INT NOT NULL,
+    
+    -- [1NF Violation]: Multi-valued / non-atomic repeating attributes
+    student_phone_numbers VARCHAR(100),
+    hobbies VARCHAR(200),
+    
+    -- [2NF Violation]: Partial Key Dependencies
+    -- (student_name & student_email depend ONLY on student_id, not course_id)
+    student_name VARCHAR(150) NOT NULL,
+    student_email VARCHAR(150),
+    
+    -- (course_title & course_credits depend ONLY on course_id, not student_id)
+    course_title VARCHAR(150) NOT NULL,
+    course_credits INT,
+    
+    -- [3NF Violation]: Transitive Functional Dependency
+    -- (instructor_id -> instructor_name, instructor_office, dept_id)
+    instructor_id INT,
+    instructor_name VARCHAR(150),
+    instructor_office VARCHAR(50),
+    dept_id INT,
+    dept_name VARCHAR(100),
+    
+    -- Valid Dependent Attribute on full composite key
+    enrollment_date DATE,
+    grade VARCHAR(5),
+    
+    PRIMARY KEY (student_id, course_id),
+    FOREIGN KEY (dept_id) REFERENCES department(dept_id)
+);`;
+    this.uploadedSqlFileName.set('normalization_test_sample.sql');
+    if (!this.state.activeProject()) {
+      this.projectTitle = 'University Enrollment Schema';
+    }
+    this.testSqlValidation();
+  }
+
+  public testSqlValidation() {
+    if (!this.sqlCode.trim()) return;
+    this.isValidatingSql.set(true);
+    this.hasValidatedSql.set(false);
+    this.validationErrors.set([]);
+    this.validationWarnings.set([]);
+    this.validatedTables.set([]);
+    this.normalizationResults.set([]);
+    this.validationSuccessMessage.set(null);
+
+    this.api.previewSql(this.sqlCode, this.sqlDialect).subscribe({
+      next: (res: any) => {
+        this.isValidatingSql.set(false);
+        this.hasValidatedSql.set(true);
+        if (res.errors && res.errors.length > 0) {
+          this.validationErrors.set(res.errors);
+        }
+        if (res.warnings && res.warnings.length > 0) {
+          this.validationWarnings.set(res.warnings);
+        }
+        if (res.tables) {
+          this.validatedTables.set(res.tables);
+        }
+        if (res.normalization) {
+          this.normalizationResults.set(res.normalization);
+        }
+        if ((!res.errors || res.errors.length === 0) && (!res.warnings || res.warnings.length === 0)) {
+          this.validationSuccessMessage.set('All SQL DDL statements adhere to valid grammar and pass relational checks.');
+        }
+      },
+      error: (err: any) => {
+        this.isValidatingSql.set(false);
+        this.hasValidatedSql.set(true);
+        this.validationErrors.set([{ message: err.error?.error || err.message || 'Syntax validation failed.' }]);
+      }
+    });
+  }
+
+  public hasNormalizationFlaws(): boolean {
+    return this.normalizationResults().some(n => 
+      n.oneNF?.status === 'FAIL' || n.twoNF?.status === 'FAIL' || n.threeNF?.status === 'FAIL'
+    ) || this.validationWarnings().length > 0;
+  }
+
+  public getNormalizationFlawsCount(): number {
+    let count = 0;
+    for (const n of this.normalizationResults()) {
+      if (n.oneNF?.status === 'FAIL') count += (n.oneNF.issues?.length || 1);
+      if (n.twoNF?.status === 'FAIL') count += (n.twoNF.issues?.length || 1);
+      if (n.threeNF?.status === 'FAIL') count += (n.threeNF.issues?.length || 1);
+    }
+    return Math.max(count, this.validationWarnings().length);
+  }
+
+  public getTableIssues(norm: any): Array<{ form: string; title: string; explanation: string }> {
+    const list: Array<{ form: string; title: string; explanation: string }> = [];
+    if (norm.oneNF?.issues) {
+      for (const iss of norm.oneNF.issues) {
+        list.push({ form: '1NF', title: iss.title, explanation: iss.explanation });
+      }
+    }
+    if (norm.twoNF?.issues) {
+      for (const iss of norm.twoNF.issues) {
+        list.push({ form: '2NF', title: iss.title, explanation: iss.explanation });
+      }
+    }
+    if (norm.threeNF?.issues) {
+      for (const iss of norm.threeNF.issues) {
+        list.push({ form: '3NF', title: iss.title, explanation: iss.explanation });
+      }
+    }
+    return list;
   }
 
   public onDiagramFileUpload(event: any, isHandwritten: boolean) {
@@ -1017,55 +1356,51 @@ export class NewAnalysisComponent implements OnInit {
     if (!this.sqlCode.trim()) return;
     this.isProcessing.set(true);
 
-    const title = this.projectTitle || 'My SQL Database';
+    const active = this.state.activeProject();
+    const title = this.projectTitle || active?.title || 'My SQL Database';
+    const existingProjectId = active?.id;
 
-    this.api.createProject({
-      title,
-      description: 'Imported via SQL Code Input',
-      dialect: this.sqlDialect
-    }).subscribe({
-      next: (projRes: any) => {
-        const projectId = projRes.project?.id;
+    const runAnalysis = (projId?: string, projObj?: any) => {
+      this.api.executeAnalysis({
+        projectId: projId,
+        projectTitle: title,
+        sql: this.sqlCode,
+        dialect: this.sqlDialect
+      }).subscribe({
+        next: (analysis) => {
+          this.state.setAnalysis(analysis, projObj || active || undefined);
+          this.isProcessing.set(false);
+          this.router.navigate(['/normalization']);
+        },
+        error: (err: any) => {
+          this.isProcessing.set(false);
+          console.error('Analysis error:', err);
+        }
+      });
+    };
 
-        this.api.executeAnalysis({
-          projectId,
-          projectTitle: title,
-          sql: this.sqlCode,
-          dialect: this.sqlDialect
-        }).subscribe({
-          next: (analysis) => {
-            this.state.setAnalysis(analysis, projRes.project);
-            this.isProcessing.set(false);
-            this.router.navigate(['/normalization']);
-          },
-          error: () => {
-            this.isProcessing.set(false);
-          }
-        });
-      },
-      error: () => {
-        // Fallback without saving if offline
-        this.api.executeAnalysis({
-          projectTitle: title,
-          sql: this.sqlCode,
-          dialect: this.sqlDialect
-        }).subscribe({
-          next: (analysis) => {
-            this.state.setAnalysis(analysis, {
-              id: 'local_proj',
-              title,
-              dialect: this.sqlDialect,
-              status: 'ANALYZED'
-            });
-            this.isProcessing.set(false);
-            this.router.navigate(['/normalization']);
-          },
-          error: () => {
-            this.isProcessing.set(false);
-          }
-        });
-      }
-    });
+    if (existingProjectId && !existingProjectId.startsWith('local_')) {
+      runAnalysis(existingProjectId, active);
+    } else {
+      this.api.createProject({
+        title,
+        description: 'Imported via SQL Code Input',
+        dialect: this.sqlDialect
+      }).subscribe({
+        next: (projRes: any) => {
+          runAnalysis(projRes.project?.id, projRes.project);
+        },
+        error: () => {
+          // Fallback without saving if offline
+          runAnalysis(undefined, {
+            id: 'local_proj',
+            title,
+            dialect: this.sqlDialect,
+            status: 'ANALYZED'
+          });
+        }
+      });
+    }
   }
 
   public clearBuilder() {
@@ -1251,80 +1586,64 @@ export class NewAnalysisComponent implements OnInit {
   public executeFinalAnalysis() {
     this.isProcessing.set(true);
 
-    const title = this.projectTitle || 'My Custom Database';
+    const active = this.state.activeProject();
+    const title = this.projectTitle || active?.title || 'My Custom Database';
+    const existingProjectId = active?.id;
 
     // Synchronize all relationships with foreign keys on editableTables before submitting
     for (const rel of this.extractedRelationships) {
       this.syncRelationshipToTables(rel);
     }
 
-    // Create a new project in backend first
-    this.api.createProject({
-      title,
-      description: 'Imported via DB Insight AI Multi-Input Studio',
-      dialect: this.sqlDialect
-    }).subscribe({
-      next: (projRes: any) => {
-        const projectId = projRes.project?.id;
+    const runAnalysis = (projId?: string, projObj?: any) => {
+      const payload: any = {
+        projectId: projId,
+        projectTitle: title,
+        dialect: this.sqlDialect
+      };
 
-        // If user came from SQL tab and has sqlCode, send both sql and tables
-        const payload: any = {
-          projectId,
-          projectTitle: title,
-          dialect: this.sqlDialect
-        };
-
-        if (this.editableTables.length > 0) {
-          payload.tables = this.editableTables;
-          if (this.extractedRelationships.length > 0) {
-            payload.relationships = this.extractedRelationships;
-          }
-        } else if (this.sqlCode.trim()) {
-          payload.sql = this.sqlCode;
+      if (this.editableTables.length > 0) {
+        payload.tables = this.editableTables;
+        if (this.extractedRelationships.length > 0) {
+          payload.relationships = this.extractedRelationships;
         }
-
-        this.api.executeAnalysis(payload).subscribe({
-          next: (analysis) => {
-            this.state.setAnalysis(analysis, projRes.project);
-            this.isProcessing.set(false);
-            this.router.navigate(['/normalization']);
-          },
-          error: () => {
-            this.isProcessing.set(false);
-          }
-        });
-      },
-      error: () => {
-        // Fallback without saving project if offline
-        const payload: any = {
-          projectTitle: title,
-          dialect: this.sqlDialect
-        };
-        if (this.editableTables.length > 0) {
-          payload.tables = this.editableTables;
-          if (this.extractedRelationships.length > 0) {
-            payload.relationships = this.extractedRelationships;
-          }
-        } else if (this.sqlCode.trim()) {
-          payload.sql = this.sqlCode;
-        }
-
-        this.api.executeAnalysis(payload).subscribe({
-          next: (analysis) => {
-            this.state.setAnalysis(analysis, {
-              id: 'local_proj',
-              title,
-              dialect: this.sqlDialect,
-              status: 'ANALYZED'
-            });
-            this.isProcessing.set(false);
-            this.router.navigate(['/normalization']);
-          },
-          error: () => {
-            this.isProcessing.set(false);
-          }
-        });
+      } else if (this.sqlCode.trim()) {
+        payload.sql = this.sqlCode;
       }
-    });
+
+      this.api.executeAnalysis(payload).subscribe({
+        next: (analysis) => {
+          this.state.setAnalysis(analysis, projObj || active || undefined);
+          this.isProcessing.set(false);
+          this.router.navigate(['/normalization']);
+        },
+        error: (err: any) => {
+          this.isProcessing.set(false);
+          console.error('Final analysis error:', err);
+        }
+      });
+    };
+
+    if (existingProjectId && !existingProjectId.startsWith('local_')) {
+      runAnalysis(existingProjectId, active);
+    } else {
+      this.api.createProject({
+        title,
+        description: 'Imported via DB Insight AI Multi-Input Studio',
+        dialect: this.sqlDialect
+      }).subscribe({
+        next: (projRes: any) => {
+          runAnalysis(projRes.project?.id, projRes.project);
+        },
+        error: () => {
+          runAnalysis(undefined, {
+            id: 'local_proj',
+            title,
+            dialect: this.sqlDialect,
+            status: 'ANALYZED'
+          });
+        }
+      });
+    }
   }
 }

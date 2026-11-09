@@ -23,10 +23,11 @@ export class AnalysisController {
 
       const parseResult = SqlParser.parse(sql, dialect);
 
+      let normAnalysis: any[] = [];
       // Audit relational normalization (1NF, 2NF, 3NF) for parsed tables
       if (parseResult.tables.length > 0) {
         try {
-          const normAnalysis = NormalizationEngine.analyzeSchema(parseResult.tables);
+          normAnalysis = NormalizationEngine.analyzeSchema(parseResult.tables);
           for (const t of normAnalysis) {
             if (t.oneNF.status === 'FAIL') {
               for (const issue of t.oneNF.issues) {
@@ -58,7 +59,7 @@ export class AnalysisController {
         }
       }
 
-      res.json({ success: true, ...parseResult });
+      res.json({ success: true, ...parseResult, normalization: normAnalysis });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
