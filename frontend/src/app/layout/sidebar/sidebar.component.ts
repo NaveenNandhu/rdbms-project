@@ -40,8 +40,8 @@ interface NavItem {
           (click)="layout.closeMobileNav()"
           [title]="isCollapsed() ? 'DB Insight AI' : ''"
         >
-          <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-soft font-bold text-lg flex-shrink-0">
-            <i class="fa-solid fa-database text-lg"></i>
+          <div class="w-10 h-10 rounded-xl flex items-center justify-center shadow-soft flex-shrink-0 p-1 overflow-hidden bg-white dark:bg-slate-800 border border-surface-border dark:border-slate-700">
+            <img src="/app-logo.png" alt="DB Insight AI Logo" class="w-full h-full object-contain rounded-lg" />
           </div>
           <div *ngIf="!isCollapsed()" class="truncate">
             <div class="font-bold text-base tracking-tight text-content-main dark:text-slate-100 flex items-center gap-1.5">

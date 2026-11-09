@@ -20,8 +20,8 @@ import { AuthService } from '../../../core/services/auth.service';
         <!-- Modal Header -->
         <div class="px-6 pt-6 pb-4 border-b border-surface-border dark:border-slate-800 flex items-center justify-between">
           <div class="flex items-center gap-3">
-            <div class="w-10 h-10 rounded-xl bg-blue-500/10 dark:bg-blue-500/20 text-primary flex items-center justify-center text-lg">
-              <i class="fa-solid fa-shield-halved"></i>
+            <div class="w-10 h-10 rounded-xl flex items-center justify-center p-1 bg-white dark:bg-slate-800 border border-surface-border dark:border-slate-700 shadow-xs">
+              <img src="/app-logo.png" alt="DB Insight Logo" class="w-full h-full object-contain rounded-lg" />
             </div>
             <div>
               <h2 class="text-base font-bold text-content-main dark:text-slate-100">User Authentication</h2>

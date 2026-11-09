@@ -14,9 +14,14 @@ import { AuthService } from '../../core/services/auth.service';
       <!-- Welcome Hero Banner -->
       <div class="bg-gradient-to-r from-white via-blue-50/50 to-white dark:from-slate-900 dark:via-slate-800/50 dark:to-slate-900 rounded-3xl p-6 md:p-8 border border-surface-border dark:border-slate-800 shadow-soft relative overflow-hidden transition-colors">
         <div class="max-w-2xl relative z-10">
-          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary-100 dark:bg-primary-950/60 text-primary-800 dark:text-primary-300 text-xs font-semibold mb-4">
-            <i class="fa-solid fa-wand-magic-sparkles text-xs"></i>
-            <span>Intelligent RDBMS Analysis & Learning Engine</span>
+          <div class="flex items-center gap-3 mb-4">
+            <div class="w-11 h-11 rounded-2xl flex items-center justify-center p-1 bg-white dark:bg-slate-800 border border-surface-border dark:border-slate-700 shadow-soft">
+              <img src="/app-logo.png" alt="DB Insight AI Logo" class="w-full h-full object-contain rounded-xl" />
+            </div>
+            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary-100 dark:bg-primary-950/60 text-primary-800 dark:text-primary-300 text-xs font-semibold">
+              <i class="fa-solid fa-wand-magic-sparkles text-xs"></i>
+              <span>Intelligent RDBMS Analysis & Learning Engine</span>
+            </div>
           </div>
           <h1 class="text-2xl sm:text-3xl md:text-4xl font-extrabold text-content-main dark:text-slate-100 tracking-tight leading-tight">
             Understand Your Database.<br/>

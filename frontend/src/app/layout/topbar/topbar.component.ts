@@ -25,8 +25,9 @@ import { ThemeService, ThemeMode } from '../../core/services/theme.service';
 
         <!-- Breadcrumb / Project title -->
         <div class="flex items-center text-xs text-content-muted dark:text-slate-400">
-          <span class="hover:text-content-main dark:hover:text-slate-200 cursor-pointer font-medium" routerLink="/dashboard">
-            DB Insight
+          <span class="hover:text-content-main dark:hover:text-slate-200 cursor-pointer font-medium flex items-center gap-1.5" routerLink="/dashboard">
+            <img src="/app-logo.png" alt="DB Insight Logo" class="w-4 h-4 rounded object-contain inline-block" />
+            <span>DB Insight</span>
           </span>
           <i class="fa-solid fa-chevron-right text-[10px] mx-2 text-slate-400 dark:text-slate-600"></i>
           <span class="font-semibold text-content-main dark:text-slate-200 truncate max-w-[140px] sm:max-w-[220px]">
