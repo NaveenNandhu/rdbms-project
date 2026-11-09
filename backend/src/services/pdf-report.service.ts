@@ -31,12 +31,12 @@ export class PdfReportService {
       const doc = new PDFDocument({ margin: 40, size: 'A4' });
       const buffers: Buffer[] = [];
 
-      doc.on('data', b => buffers.push(b));
+      doc.on('data', (b: any) => buffers.push(b));
       doc.on('end', () => resolve(Buffer.concat(buffers)));
-      doc.on('error', err => reject(err));
+      doc.on('error', (err: any) => reject(err));
 
       // Colors
-      const primaryColor = '#F97316';
+      const primaryColor = '#2563EB';
       const darkColor = '#1E293B';
       const grayColor = '#64748B';
 
