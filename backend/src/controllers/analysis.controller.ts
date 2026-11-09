@@ -22,6 +22,42 @@ export class AnalysisController {
       }
 
       const parseResult = SqlParser.parse(sql, dialect);
+
+      // Audit relational normalization (1NF, 2NF, 3NF) for parsed tables
+      if (parseResult.tables.length > 0) {
+        try {
+          const normAnalysis = NormalizationEngine.analyzeSchema(parseResult.tables);
+          for (const t of normAnalysis) {
+            if (t.oneNF.status === 'FAIL') {
+              for (const issue of t.oneNF.issues) {
+                parseResult.warnings.push({
+                  message: `[1NF Normalization Flaw] Table '${t.tableName}': ${issue.explanation}`,
+                  severity: 'HIGH'
+                });
+              }
+            }
+            if (t.twoNF.status === 'FAIL') {
+              for (const issue of t.twoNF.issues) {
+                parseResult.warnings.push({
+                  message: `[2NF Partial Key Dependency] Table '${t.tableName}': ${issue.explanation}`,
+                  severity: 'HIGH'
+                });
+              }
+            }
+            if (t.threeNF.status === 'FAIL') {
+              for (const issue of t.threeNF.issues) {
+                parseResult.warnings.push({
+                  message: `[3NF Transitive Dependency] Table '${t.tableName}': ${issue.explanation}`,
+                  severity: 'HIGH'
+                });
+              }
+            }
+          }
+        } catch {
+          // Graceful fallback if normalization heuristics skip
+        }
+      }
+
       res.json({ success: true, ...parseResult });
     } catch (error: any) {
       res.status(500).json({ error: error.message });

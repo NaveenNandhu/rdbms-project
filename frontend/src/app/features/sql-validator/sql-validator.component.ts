@@ -1,7 +1,6 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
 import { ApiService } from '../../core/services/api.service';
 import { ProjectStateService } from '../../core/services/project-state.service';
 
@@ -14,9 +13,9 @@ import { ProjectStateService } from '../../core/services/project-state.service';
       <!-- Header -->
       <div class="flex flex-wrap items-center justify-between gap-3 border-b border-surface-border dark:border-slate-800 pb-4">
         <div>
-          <h1 class="text-2xl font-extrabold text-content-main dark:text-slate-100 tracking-tight">SQL Validator & Semantic Auditor</h1>
+          <h1 class="text-2xl font-extrabold text-content-main dark:text-slate-100 tracking-tight">SQL Validator</h1>
           <p class="text-xs text-content-muted dark:text-slate-400 mt-1">
-            Deterministic AST parsing, dialect syntax checks, constraint validation, and auto-generated corrected SQL.
+            Deterministic AST parsing, syntax validation, constraint verification, and relational audit.
           </p>
         </div>
 
@@ -27,59 +26,27 @@ import { ProjectStateService } from '../../core/services/project-state.service';
         </span>
       </div>
 
-      <!-- Dialect Selector & Actions Bar -->
+      <!-- Actions Bar: Clean & focused with just Clear and Validate -->
       <div class="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-surface-border dark:border-slate-800 shadow-soft flex flex-wrap items-center justify-between gap-3 transition-colors">
-        <div class="flex items-center space-x-3 text-xs">
-          <span class="font-semibold text-content-muted dark:text-slate-400 uppercase tracking-wider">Target Dialect:</span>
-          <select [(ngModel)]="dialect" class="border border-surface-border dark:border-slate-700 rounded-xl px-3 py-1.5 font-medium bg-surface-subtle dark:bg-slate-800 text-content-main dark:text-slate-100">
-            <option value="postgresql">PostgreSQL</option>
-            <option value="mysql">MySQL</option>
-            <option value="sqlite">SQLite</option>
-          </select>
+        <div class="text-xs text-content-muted dark:text-slate-400 font-medium">
+          Paste or write CREATE TABLE and ALTER TABLE statements, then click Validate SQL.
         </div>
 
-        <!-- Preset Toolbar -->
-        <div class="flex flex-wrap items-center gap-2">
-          <button
-            *ngIf="state.activeAnalysis()"
-            (click)="loadActiveProjectSql()"
-            class="px-3 py-1.5 rounded-xl border border-primary/40 bg-blue-50/50 dark:bg-blue-950/20 hover:bg-blue-100/60 text-primary-700 dark:text-primary-300 text-xs font-semibold flex items-center gap-1.5 transition-colors"
-          >
-            <i class="fa-solid fa-file-code text-xs"></i>
-            <span>Load Active Schema</span>
-          </button>
-          <button
-            (click)="loadSample('hospital')"
-            class="px-3 py-1.5 rounded-xl border border-surface-border dark:border-slate-700 bg-surface-subtle dark:bg-slate-800 hover:bg-surface-hover dark:hover:bg-slate-700 text-content-main dark:text-slate-200 text-xs font-medium transition-colors"
-          >
-            Hospital Sample
-          </button>
-          <button
-            (click)="loadSample('ecommerce')"
-            class="px-3 py-1.5 rounded-xl border border-surface-border dark:border-slate-700 bg-surface-subtle dark:bg-slate-800 hover:bg-surface-hover dark:hover:bg-slate-700 text-content-main dark:text-slate-200 text-xs font-medium transition-colors"
-          >
-            E-Commerce Sample
-          </button>
-          <button
-            (click)="loadSample('invalid')"
-            class="px-3 py-1.5 rounded-xl border border-red-300 dark:border-red-900/50 bg-red-50 dark:bg-red-950/30 hover:bg-red-100/70 text-red-700 dark:text-red-300 text-xs font-semibold flex items-center gap-1.5 transition-colors"
-          >
-            <i class="fa-solid fa-bug text-xs"></i>
-            <span>Broken SQL Sample</span>
-          </button>
+        <div class="flex items-center gap-3">
           <button
             (click)="clearSql()"
-            class="px-3 py-1.5 rounded-xl border border-surface-border dark:border-slate-700 bg-surface-subtle dark:bg-slate-800 hover:bg-surface-hover dark:hover:bg-slate-700 text-content-muted dark:text-slate-400 text-xs font-medium transition-colors"
+            class="px-4 py-2 rounded-xl border border-surface-border dark:border-slate-700 bg-surface-subtle dark:bg-slate-800 hover:bg-surface-hover dark:hover:bg-slate-700 text-content-muted dark:text-slate-400 text-xs font-medium transition-colors"
           >
             Clear
           </button>
           <button
             (click)="validateSql()"
-            [disabled]="isValidating()"
-            class="px-4 py-2 rounded-xl bg-primary hover:bg-primary-hover text-white text-xs font-semibold shadow-soft flex items-center gap-1.5 transition-all transform active:scale-95"
+            [disabled]="isValidating() || !sqlInput.trim()"
+            class="px-6 py-2.5 rounded-xl bg-primary hover:bg-primary-hover disabled:opacity-50 text-white text-xs font-bold shadow-soft flex items-center gap-2 transition-all transform active:scale-95"
           >
-            <i class="fa-solid fa-bolt text-xs"></i>
-            <span>Validate SQL Syntax</span>
+            <i *ngIf="isValidating()" class="fa-solid fa-spinner fa-spin text-xs"></i>
+            <i *ngIf="!isValidating()" class="fa-solid fa-bolt text-xs"></i>
+            <span>{{ isValidating() ? 'Validating SQL...' : 'Validate SQL' }}</span>
           </button>
         </div>
       </div>
@@ -100,24 +67,48 @@ import { ProjectStateService } from '../../core/services/project-state.service';
 
           <textarea
             [(ngModel)]="sqlInput"
-            rows="18"
+            rows="19"
             class="w-full font-mono text-xs p-4 rounded-xl border border-surface-border dark:border-slate-700 bg-gray-900 text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary/50"
-            placeholder="-- Paste or write your DDL statements here..."
+            placeholder="-- Paste or write your CREATE TABLE statements here...&#10;CREATE TABLE department (&#10;  dept_id INT PRIMARY KEY,&#10;  dept_name VARCHAR(100) NOT NULL&#10;);"
           ></textarea>
         </div>
 
-        <!-- Right: Validation Findings & Warnings -->
+        <!-- Right: Validation Findings -->
         <div class="bg-white dark:bg-slate-900 rounded-2xl border border-surface-border dark:border-slate-800 shadow-soft p-5 space-y-4 flex flex-col justify-between transition-colors">
-          <div class="space-y-3 overflow-y-auto max-h-[460px] custom-scrollbar">
+          <div class="space-y-3 overflow-y-auto max-h-[480px] custom-scrollbar">
             <div class="flex items-center justify-between pb-2 border-b border-surface-border dark:border-slate-800">
               <span class="font-bold text-xs text-content-main dark:text-slate-200 uppercase tracking-wider">Diagnostic Findings</span>
-              <span class="text-xs px-2.5 py-0.5 rounded-full font-bold" [ngClass]="validationErrors().length > 0 ? 'bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-300' : 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300'">
+              <span
+                *ngIf="hasValidated()"
+                class="text-xs px-2.5 py-0.5 rounded-full font-bold"
+                [ngClass]="validationErrors().length > 0 ? 'bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-300' : (validationWarnings().length > 0 ? 'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300' : 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300')"
+              >
                 {{ validationErrors().length }} Errors / {{ validationWarnings().length }} Warnings
               </span>
             </div>
 
+            <!-- Initial unvalidated state -->
+            <div *ngIf="!hasValidated()" class="p-10 text-center text-xs text-content-muted dark:text-slate-400 space-y-2">
+              <div class="text-3xl text-slate-300 dark:text-slate-700">
+                <i class="fa-solid fa-code-compare"></i>
+              </div>
+              <div class="font-bold text-content-main dark:text-slate-200">Awaiting SQL Validation</div>
+              <p class="max-w-xs mx-auto">
+                Paste your DDL statements on the left and click <span class="font-semibold text-primary">"Validate SQL"</span> to check syntax, constraints, and relational normalization.
+              </p>
+            </div>
+
+            <!-- Validating Spinner State -->
+            <div *ngIf="isValidating()" class="p-10 text-center text-xs text-content-muted dark:text-slate-400 space-y-3">
+              <div class="text-3xl text-primary animate-spin">
+                <i class="fa-solid fa-circle-notch"></i>
+              </div>
+              <div class="font-bold text-content-main dark:text-slate-200">Validating SQL Grammar & Semantics...</div>
+              <p>Running isolated AST parser and relational integrity verifier.</p>
+            </div>
+
             <!-- Syntax Errors -->
-            <div *ngIf="validationErrors().length > 0" class="space-y-2">
+            <div *ngIf="hasValidated() && !isValidating() && validationErrors().length > 0" class="space-y-2">
               <div *ngFor="let err of validationErrors()" class="p-3 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/40 rounded-xl text-xs space-y-1">
                 <div class="font-bold text-red-800 dark:text-red-300 flex items-center justify-between">
                   <span class="flex items-center gap-1.5">
@@ -130,47 +121,58 @@ import { ProjectStateService } from '../../core/services/project-state.service';
               </div>
             </div>
 
-            <!-- Warnings -->
-            <div *ngIf="validationWarnings().length > 0" class="space-y-2">
+            <!-- Warnings (Constraint & Normalization) -->
+            <div *ngIf="hasValidated() && !isValidating() && validationWarnings().length > 0" class="space-y-2">
               <div *ngFor="let warn of validationWarnings()" class="p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/40 rounded-xl text-xs space-y-1">
                 <div class="font-bold text-amber-800 dark:text-amber-300 flex items-center justify-between">
                   <span class="flex items-center gap-1.5">
                     <i class="fa-solid fa-triangle-exclamation text-amber-600"></i>
-                    <span>Constraint Warning ({{ warn.severity }})</span>
+                    <span>Warning ({{ warn.severity || 'HIGH' }})</span>
                   </span>
                   <span *ngIf="warn.line" class="font-mono text-[10px] bg-amber-200 dark:bg-amber-900/60 text-amber-900 dark:text-amber-200 px-1.5 py-0.5 rounded">Line {{ warn.line }}</span>
                 </div>
-                <div class="text-amber-700 dark:text-amber-300">{{ warn.message }}</div>
+                <div class="text-amber-800 dark:text-amber-200">{{ warn.message }}</div>
               </div>
             </div>
 
-            <!-- Clean state -->
-            <div *ngIf="validationErrors().length === 0 && validationWarnings().length === 0" class="p-8 text-center text-xs text-content-muted dark:text-slate-400">
+            <!-- Validated Tables Breakdown -->
+            <div *ngIf="hasValidated() && !isValidating() && validatedTables().length > 0" class="space-y-2 pt-2 border-t border-surface-border dark:border-slate-800">
+              <div class="text-[11px] font-bold text-content-main dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                <i class="fa-solid fa-table-list text-primary"></i>
+                <span>Verified Tables ({{ validatedTables().length }})</span>
+              </div>
+              <div class="grid grid-cols-1 gap-2">
+                <div *ngFor="let t of validatedTables()" class="p-2.5 bg-surface-subtle dark:bg-slate-800/60 rounded-xl border border-surface-border dark:border-slate-700/60 text-xs flex items-center justify-between">
+                  <div>
+                    <span class="font-bold text-content-main dark:text-slate-100 font-mono">{{ t.name }}</span>
+                    <span class="text-[11px] text-content-muted dark:text-slate-400 ml-2">({{ t.columns.length }} columns)</span>
+                  </div>
+                  <div class="flex items-center gap-1.5">
+                    <span *ngIf="t.primaryKey && t.primaryKey.length > 0" class="px-2 py-0.5 rounded text-[10px] bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 font-semibold font-mono">
+                      PK: {{ t.primaryKey.join(', ') }}
+                    </span>
+                    <span *ngIf="!t.primaryKey || t.primaryKey.length === 0" class="px-2 py-0.5 rounded text-[10px] bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-300 font-semibold">
+                      No PK
+                    </span>
+                    <span *ngIf="t.foreignKeys && t.foreignKeys.length > 0" class="px-2 py-0.5 rounded text-[10px] bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-semibold font-mono">
+                      {{ t.foreignKeys.length }} FK
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Clean state (0 errors & 0 warnings) -->
+            <div *ngIf="hasValidated() && !isValidating() && validationErrors().length === 0 && validationWarnings().length === 0" class="p-6 text-center text-xs text-content-muted dark:text-slate-400">
               <div class="text-3xl mb-2 text-emerald-500">
                 <i class="fa-solid fa-circle-check"></i>
               </div>
-              <div class="font-bold text-content-main dark:text-slate-100">No Syntax or Semantic Errors Found!</div>
-              <div class="mt-1">All CREATE TABLE statements adhere to valid {{ dialect | uppercase }} grammar.</div>
-
-              <!-- Bridge to Relational Normalization Engine -->
-              <div *ngIf="sqlInput.trim()" class="mt-5 pt-4 border-t border-surface-border dark:border-slate-800 space-y-2">
-                <p class="text-[11px] text-content-muted dark:text-slate-400">
-                  Ready to test for relational design violations (1NF repeating groups, 2NF partial dependencies, 3NF transitive dependencies)?
-                </p>
-                <button
-                  (click)="sendToNormalization()"
-                  [disabled]="isAnalyzing()"
-                  class="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-soft transition-all inline-flex items-center gap-2"
-                >
-                  <i *ngIf="isAnalyzing()" class="fa-solid fa-spinner fa-spin text-xs"></i>
-                  <i *ngIf="!isAnalyzing()" class="fa-solid fa-brain text-xs"></i>
-                  <span>{{ isAnalyzing() ? 'Running Normalization Engine...' : 'Run Normalization Analysis (1NF / 2NF / 3NF) →' }}</span>
-                </button>
-              </div>
+              <div class="font-bold text-content-main dark:text-slate-100 text-sm">No Syntax or Semantic Errors Found!</div>
+              <div class="mt-1">All CREATE TABLE statements adhere to valid SQL grammar and relational constraints.</div>
             </div>
           </div>
 
-          <!-- Auto-Corrected SQL Box -->
+          <!-- Auto-Corrected SQL Box (if any) -->
           <div *ngIf="correctedSql()" class="pt-3 border-t border-surface-border dark:border-slate-800 space-y-2">
             <div class="flex items-center justify-between">
               <span class="text-xs font-bold text-emerald-700 dark:text-emerald-400 flex items-center gap-1.5">
@@ -194,15 +196,16 @@ import { ProjectStateService } from '../../core/services/project-state.service';
 })
 export class SqlValidatorComponent implements OnInit {
   private api = inject(ApiService);
-  private router = inject(Router);
   public state = inject(ProjectStateService);
 
   public sqlInput: string = '';
   public dialect: string = 'postgresql';
   public isValidating = signal<boolean>(false);
-  public isAnalyzing = signal<boolean>(false);
+  public hasValidated = signal<boolean>(false);
   public validationErrors = signal<any[]>([]);
   public validationWarnings = signal<any[]>([]);
+  public validatedTables = signal<any[]>([]);
+  public validatedRelationships = signal<any[]>([]);
   public correctedSql = signal<string>('');
 
   ngOnInit(): void {
@@ -224,113 +227,22 @@ export class SqlValidatorComponent implements OnInit {
     return this.sqlInput.split('\n').length;
   }
 
-  public loadActiveProjectSql() {
-    const analysis = this.state.activeAnalysis();
-    if (analysis && analysis.tables && analysis.tables.length > 0) {
-      this.sqlInput = this.formatTablesToSql(analysis.tables);
-      this.correctedSql.set(analysis.recommendations?.correctedFullSql || '');
-      this.validateSql();
-    }
-  }
-
   public clearSql() {
     this.sqlInput = '';
+    this.hasValidated.set(false);
     this.validationErrors.set([]);
     this.validationWarnings.set([]);
-  }
-
-  public loadSample(type: 'hospital' | 'ecommerce' | 'invalid') {
-    if (type === 'hospital') {
-      this.sqlInput = `CREATE TABLE patients (
-  patient_id INT PRIMARY KEY,
-  first_name VARCHAR(50) NOT NULL,
-  last_name VARCHAR(50) NOT NULL,
-  date_of_birth DATE NOT NULL,
-  contact_number VARCHAR(20)
-);
-
-CREATE TABLE doctors (
-  doctor_id INT PRIMARY KEY,
-  doctor_name VARCHAR(100) NOT NULL,
-  specialization VARCHAR(100) NOT NULL
-);
-
-CREATE TABLE appointments (
-  appointment_id INT PRIMARY KEY,
-  patient_id INT NOT NULL,
-  doctor_id INT NOT NULL,
-  appointment_date TIMESTAMP NOT NULL,
-  diagnosis TEXT,
-  FOREIGN KEY (patient_id) REFERENCES patients(patient_id),
-  FOREIGN KEY (doctor_id) REFERENCES doctors(doctor_id)
-);`;
-    } else if (type === 'ecommerce') {
-      this.sqlInput = `CREATE TABLE customers (
-  customer_id INT PRIMARY KEY,
-  full_name VARCHAR(100) NOT NULL,
-  email VARCHAR(100) UNIQUE NOT NULL
-);
-
-CREATE TABLE orders (
-  order_id INT PRIMARY KEY,
-  customer_id INT NOT NULL,
-  order_date TIMESTAMP NOT NULL,
-  total_amount NUMERIC(10, 2) NOT NULL,
-  FOREIGN KEY (customer_id) REFERENCES customers(customer_id)
-);
-
-CREATE TABLE order_items (
-  item_id INT PRIMARY KEY,
-  order_id INT NOT NULL,
-  product_name VARCHAR(150) NOT NULL,
-  quantity INT NOT NULL,
-  price NUMERIC(10, 2) NOT NULL,
-  FOREIGN KEY (order_id) REFERENCES orders(order_id)
-);`;
-    } else if (type === 'invalid') {
-      this.sqlInput = `-- Schema with intentional syntax and DDL constraint errors for testing
-CREATE TABLE students (
-  student_id INT PRIMARY KEY,
-  student_code VARCHAR(20) PRIMARY KEY, -- Multiple PRIMARY KEYs
-  first_name VARCHAR(50)
-  last_name VARCHAR(50) NOT NULL,       -- Missing comma delimiter
-  first_name VARCHAR(100),              -- Duplicate column 'first_name'
-  dept_id INT REFERENCES unknown_departments(dept_id), -- Non-existent referenced table
-  notes CUSTOM_BAD_TYPE                 -- Non-standard SQL data type
-);
-
-CREATE TABLE broken_enrollment (        -- Missing closing parenthesis
-  enrollment_id INT PRIMARY KEY,
-  student_id INT NOT NULL;
-`;
-    }
-    this.validateSql();
-  }
-
-  public sendToNormalization() {
-    if (!this.sqlInput.trim()) return;
-    this.isAnalyzing.set(true);
-    this.api.executeAnalysis({
-      projectTitle: 'SQL Analysis',
-      sql: this.sqlInput,
-      dialect: this.dialect
-    }).subscribe({
-      next: (res: any) => {
-        this.isAnalyzing.set(false);
-        this.state.setAnalysis(res);
-        this.router.navigate(['/normalization']);
-      },
-      error: (err: any) => {
-        this.isAnalyzing.set(false);
-        alert(err?.error?.error || 'Failed to analyze normalization. Ensure schema is syntactically valid.');
-      }
-    });
+    this.validatedTables.set([]);
+    this.validatedRelationships.set([]);
   }
 
   public validateSql() {
     if (!this.sqlInput.trim()) {
+      this.hasValidated.set(false);
       this.validationErrors.set([]);
       this.validationWarnings.set([]);
+      this.validatedTables.set([]);
+      this.validatedRelationships.set([]);
       return;
     }
 
@@ -339,9 +251,17 @@ CREATE TABLE broken_enrollment (        -- Missing closing parenthesis
       next: (res: any) => {
         this.validationErrors.set(res.errors || []);
         this.validationWarnings.set(res.warnings || []);
+        this.validatedTables.set(res.tables || []);
+        this.validatedRelationships.set(res.relationships || []);
+        this.hasValidated.set(true);
         this.isValidating.set(false);
       },
-      error: () => {
+      error: (err: any) => {
+        this.validationErrors.set([{
+          line: undefined,
+          message: err?.error?.error || 'Validation request failed.'
+        }]);
+        this.hasValidated.set(true);
         this.isValidating.set(false);
       }
     });

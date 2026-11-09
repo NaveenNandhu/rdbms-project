@@ -149,10 +149,11 @@ export class SqlParser {
   }
 
   private static cleanComments(sql: string): string {
-    // Replace single line comments -- ... and /* ... */ with whitespace to preserve line counts
+    // Replace single line comments -- ..., // ..., and /* ... */ with whitespace to preserve line counts
     return sql
       .replace(/\/\*[\s\S]*?\*\//g, match => match.replace(/[^\n]/g, ' '))
-      .replace(/--.*$/gm, match => match.replace(/[^\n]/g, ' '));
+      .replace(/--.*$/gm, match => match.replace(/[^\n]/g, ' '))
+      .replace(/\/\/.*$/gm, match => match.replace(/[^\n]/g, ' '));
   }
 
   private static splitStatements(sql: string): Array<{ text: string; line: number }> {
