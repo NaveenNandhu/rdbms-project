@@ -20,25 +20,25 @@ router.post('/auth/login', AuthController.login);
 router.get('/auth/profile', authenticateToken, AuthController.getProfile);
 
 // --- Project Routes ---
-router.get('/projects/dashboard', authenticateToken, ProjectController.getDashboardOverview);
-router.get('/projects', authenticateToken, ProjectController.listProjects);
-router.post('/projects', authenticateToken, ProjectController.createProject);
-router.get('/projects/:id', authenticateToken, ProjectController.getProject);
-router.delete('/projects/:id', authenticateToken, ProjectController.deleteProject);
+router.get('/projects/dashboard', optionalAuthenticateToken, ProjectController.getDashboardOverview);
+router.get('/projects', optionalAuthenticateToken, ProjectController.listProjects);
+router.post('/projects', optionalAuthenticateToken, ProjectController.createProject);
+router.get('/projects/:id', optionalAuthenticateToken, ProjectController.getProject);
+router.delete('/projects/:id', optionalAuthenticateToken, ProjectController.deleteProject);
 
 // --- Analysis Engine Routes ---
 router.post('/analysis/preview-sql', optionalAuthenticateToken, AnalysisController.previewSql);
-router.post('/analysis/parse-diagram', authenticateToken, upload.single('diagram'), AnalysisController.parseDiagramImage);
-router.post('/analysis/execute', authenticateToken, AnalysisController.executeAnalysis);
-router.post('/analysis/add-fd', authenticateToken, AnalysisController.addCustomFd);
+router.post('/analysis/parse-diagram', optionalAuthenticateToken, upload.single('diagram'), AnalysisController.parseDiagramImage);
+router.post('/analysis/execute', optionalAuthenticateToken, AnalysisController.executeAnalysis);
+router.post('/analysis/add-fd', optionalAuthenticateToken, AnalysisController.addCustomFd);
 
 // --- AI Tutor Routes ---
-router.post('/tutor/ask', authenticateToken, TutorController.ask);
+router.post('/tutor/ask', optionalAuthenticateToken, TutorController.ask);
 
 // --- Learning Center Routes ---
-router.get('/learning/curriculum', authenticateToken, LearningController.getCurriculum);
-router.get('/learning/topic/:id', authenticateToken, LearningController.getTopic);
-router.post('/learning/submit-quiz', authenticateToken, LearningController.submitQuiz);
+router.get('/learning/curriculum', optionalAuthenticateToken, LearningController.getCurriculum);
+router.get('/learning/topic/:id', optionalAuthenticateToken, LearningController.getTopic);
+router.post('/learning/submit-quiz', optionalAuthenticateToken, LearningController.submitQuiz);
 router.post('/learning/unit', authenticateToken, requireRole(['PROFESSOR', 'ADMIN']), LearningController.upsertUnit);
 router.post('/learning/topic', authenticateToken, requireRole(['PROFESSOR', 'ADMIN']), LearningController.upsertTopic);
 

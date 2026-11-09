@@ -106,11 +106,11 @@ export class ApiService {
 
   // --- Learning Center ---
   getCurriculum(): Observable<{ success: boolean; units: LearningUnit[] }> {
-    return this.http.get<{ success: boolean; units: LearningUnit[] }>(`${this.baseUrl}/learning/curriculum`);
+    return this.http.get<{ success: boolean; units: LearningUnit[] }>(`${this.baseUrl}/learning/curriculum`, { headers: this.getHeaders() });
   }
 
   getTopic(id: string): Observable<any> {
-    return this.http.get(`${this.baseUrl}/learning/topic/${id}`);
+    return this.http.get(`${this.baseUrl}/learning/topic/${id}`, { headers: this.getHeaders() });
   }
 
   submitQuiz(topicId: string, answers: Record<string, number>): Observable<any> {

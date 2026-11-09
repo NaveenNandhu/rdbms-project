@@ -148,6 +148,8 @@ import { Project } from '../../core/models/schema.models';
               <option value="mysql">MySQL</option>
               <option value="sqlite">SQLite</option>
             </select>
+          <div *ngIf="createError()" class="p-3 rounded-xl bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-900 text-xs">
+            {{ createError() }}
           </div>
         </div>
 
@@ -160,9 +162,11 @@ import { Project } from '../../core/models/schema.models';
           </button>
           <button
             (click)="createProject()"
-            class="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-md shadow-blue-500/25 transition-all"
+            [disabled]="isCreating() || !newTitle.trim()"
+            class="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold text-xs shadow-md shadow-blue-500/25 transition-all flex items-center gap-1.5"
           >
-            Create Project
+            <i *ngIf="isCreating()" class="fa-solid fa-spinner fa-spin text-xs"></i>
+            <span>{{ isCreating() ? 'Creating Project...' : 'Create Project' }}</span>
           </button>
         </div>
       </div>
@@ -176,6 +180,8 @@ export class ProjectsComponent implements OnInit {
 
   public projects: Project[] = [];
   public showCreateModal = signal<boolean>(false);
+  public isCreating = signal<boolean>(false);
+  public createError = signal<string | null>(null);
 
   public newTitle: string = '';
   public newDesc: string = '';
@@ -198,16 +204,24 @@ export class ProjectsComponent implements OnInit {
   public createProject() {
     if (!this.newTitle.trim()) return;
 
+    this.isCreating.set(true);
+    this.createError.set(null);
+
     this.api.createProject({
       title: this.newTitle,
       description: this.newDesc,
       dialect: this.newDialect
     }).subscribe({
       next: () => {
+        this.isCreating.set(false);
         this.showCreateModal.set(false);
         this.newTitle = '';
         this.newDesc = '';
         this.loadProjects();
+      },
+      error: (err: any) => {
+        this.isCreating.set(false);
+        this.createError.set(err?.error?.error || 'Failed to create project. Please try again.');
       }
     });
   }
