@@ -1,0 +1,27 @@
+{
+  "name": "db-insight-ai",
+  "version": "1.0.0",
+  "description": "AI-Powered RDBMS Analyzer, Database Design Validator & Learning Platform",
+  "scripts": {
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:frontend": "npm --prefix frontend start",
+    "build:backend": "npm --prefix backend run build",
+    "build:frontend": "npm --prefix frontend run build",
+    "build": "npm run build:backend && npm run build:frontend",
+    "seed": "npm --prefix backend run prisma:seed",
+    "start": "npm --prefix backend start"
+  },
+  "keywords": [
+    "rdbms",
+    "database-design",
+    "normalization",
+    "bcnf",
+    "integrity-checker",
+    "ai-tutor",
+    "angular",
+    "express",
+    "prisma"
+  ],
+  "author": "Antigravity Team",
+  "license": "MIT"
+}

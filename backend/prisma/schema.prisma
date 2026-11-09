@@ -1,0 +1,288 @@
+// Prisma Schema for DB Insight AI
+// Supports SQLite out of the box and PostgreSQL via datasource configuration
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String        @id @default(uuid())
+  email        String        @unique
+  passwordHash String
+  fullName     String
+  avatarUrl    String?
+  role         String        @default("STUDENT") // STUDENT, PROFESSOR, ADMIN
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  userRoles    UserRole[]
+  projects     Project[]
+  quizAttempts QuizAttempt[]
+  reports      Report[]
+}
+
+model Role {
+  id          String     @id @default(uuid())
+  name        String     @unique // STUDENT, PROFESSOR, ADMIN
+  description String?
+  userRoles   UserRole[]
+}
+
+model UserRole {
+  id        String   @id @default(uuid())
+  userId    String
+  roleId    String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roleId])
+}
+
+model Project {
+  id          String   @id @default(uuid())
+  userId      String
+  title       String
+  description String?
+  dialect     String   @default("postgresql") // postgresql, mysql, sqlite
+  status      String   @default("DRAFT") // DRAFT, ANALYZED, ARCHIVED
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user             User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  uploadedFiles    UploadedFile[]
+  databaseSchemas  DatabaseSchema[]
+  analysisSessions AnalysisSession[]
+  schemaVersions   SchemaVersion[]
+  reports          Report[]
+}
+
+model UploadedFile {
+  id           String   @id @default(uuid())
+  projectId    String
+  fileName     String
+  originalName String
+  fileType     String   // sql, png, jpg, jpeg, webp, pdf
+  fileSize     Int
+  mimeType     String
+  filePath     String
+  extractedRaw String?  // OCR text or raw SQL
+  createdAt    DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model DatabaseSchema {
+  id          String   @id @default(uuid())
+  projectId   String
+  name        String
+  description String?
+  isCorrected Boolean  @default(false)
+  version     Int      @default(1)
+  rawSql      String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  project               Project                @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tables                DatabaseTable[]
+  relationships         DatabaseRelationship[]
+  functionalDependencies FunctionalDependency[]
+  analysisSessions      AnalysisSession[]
+}
+
+model DatabaseTable {
+  id          String   @id @default(uuid())
+  schemaId    String
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+
+  schema      DatabaseSchema       @relation(fields: [schemaId], references: [id], onDelete: Cascade)
+  columns     DatabaseColumn[]
+  constraints DatabaseConstraint[]
+}
+
+model DatabaseColumn {
+  id           String   @id @default(uuid())
+  tableId      String
+  name         String
+  dataType     String
+  isPrimaryKey Boolean  @default(false)
+  isForeignKey Boolean  @default(false)
+  isNullable   Boolean  @default(true)
+  isUnique     Boolean  @default(false)
+  defaultValue String?
+  ordinalPos   Int      @default(0)
+
+  table DatabaseTable @relation(fields: [tableId], references: [id], onDelete: Cascade)
+}
+
+model DatabaseConstraint {
+  id             String   @id @default(uuid())
+  tableId        String
+  name           String
+  type           String   // PRIMARY KEY, FOREIGN KEY, UNIQUE, CHECK, NOT NULL
+  definition     String
+  targetTable    String?
+  targetColumn   String?
+  onDeleteAction String?
+  onUpdateAction String?
+
+  table DatabaseTable @relation(fields: [tableId], references: [id], onDelete: Cascade)
+}
+
+model DatabaseRelationship {
+  id             String  @id @default(uuid())
+  schemaId       String
+  sourceTable    String
+  sourceColumn   String
+  targetTable    String
+  targetColumn   String
+  cardinality    String  // 1:1, 1:N, M:N
+  isConfirmed    Boolean @default(false)
+  isIdentifying  Boolean @default(false)
+  sourceOptional Boolean @default(true)
+  targetOptional Boolean @default(false)
+  confidence     Float   @default(1.0)
+  explanation    String?
+
+  schema DatabaseSchema @relation(fields: [schemaId], references: [id], onDelete: Cascade)
+}
+
+model FunctionalDependency {
+  id            String  @id @default(uuid())
+  schemaId      String
+  tableName     String
+  determinants  String  // Comma-separated list of attributes (LHS)
+  dependents    String  // Comma-separated list of attributes (RHS)
+  isCandidateKey Boolean @default(false)
+  isSourceUser  Boolean @default(false) // User defined or auto inferred
+  explanation   String?
+
+  schema DatabaseSchema @relation(fields: [schemaId], references: [id], onDelete: Cascade)
+}
+
+model AnalysisSession {
+  id             String   @id @default(uuid())
+  projectId      String
+  schemaId       String
+  normalFormRank String   // NOT_1NF, 1NF, 2NF, 3NF, BCNF
+  score          Float    @default(0.0) // 0 - 100 overall design score
+  createdAt      DateTime @default(now())
+
+  project         Project                  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  schema          DatabaseSchema           @relation(fields: [schemaId], references: [id], onDelete: Cascade)
+  issues          AnalysisIssue[]
+  recommendations AnalysisRecommendation[]
+}
+
+model AnalysisIssue {
+  id          String   @id @default(uuid())
+  sessionId   String
+  category    String   // NORMALIZATION, INTEGRITY, ANOMALY, SQL_SYNTAX, PERFORMANCE
+  severity    String   // CRITICAL, HIGH, MEDIUM, LOW, INFO
+  title       String
+  explanation String
+  tableName   String?
+  columns     String?  // JSON or comma-separated
+  whyItMatters String
+  exampleData String?  // Scenario showing insert/update/delete anomaly
+  ruleViolated String?
+  createdAt   DateTime @default(now())
+
+  session AnalysisSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+}
+
+model AnalysisRecommendation {
+  id            String   @id @default(uuid())
+  sessionId     String
+  issueId       String?
+  title         String
+  description   String
+  beforeSchema  String   // JSON string of before representation
+  afterSchema   String   // JSON string of corrected representation
+  correctedSql  String?
+  status        String   @default("PENDING") // PENDING, APPLIED, REJECTED
+  createdAt     DateTime @default(now())
+
+  session AnalysisSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+}
+
+model SchemaVersion {
+  id          String   @id @default(uuid())
+  projectId   String
+  version     Int
+  description String?
+  schemaJson  String
+  sqlSnapshot String?
+  createdAt   DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model LearningUnit {
+  id          String          @id @default(uuid())
+  title       String
+  orderIndex  Int             @default(0)
+  description String?
+  topics      LearningTopic[]
+}
+
+model LearningTopic {
+  id            String          @id @default(uuid())
+  unitId        String
+  title         String
+  orderIndex    Int             @default(0)
+  summary       String
+  contentMarkdown String
+  beginnerExplanation String?
+  advancedExplanation String?
+  moduleLink    String?         // e.g. /normalization, /integrity, /visualizer
+  createdAt     DateTime        @default(now())
+
+  unit          LearningUnit    @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  quizQuestions QuizQuestion[]
+}
+
+model QuizQuestion {
+  id            String   @id @default(uuid())
+  topicId       String
+  questionText  String
+  optionsJson   String   // JSON array of strings
+  correctAnswer Int      // Index 0-based
+  explanation   String
+  difficulty    String   @default("EASY") // EASY, MEDIUM, HARD
+  createdAt     DateTime @default(now())
+
+  topic LearningTopic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+}
+
+model QuizAttempt {
+  id        String   @id @default(uuid())
+  userId    String
+  score     Float
+  total     Int
+  answers   String   // JSON
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Report {
+  id           String   @id @default(uuid())
+  userId       String
+  projectId    String
+  title        String
+  summaryJson  String
+  pdfPath      String?
+  createdAt    DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
